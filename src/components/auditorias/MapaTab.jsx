@@ -15,7 +15,7 @@ import {
 
 const DEFAULT_CENTER = [-70.6693, -33.4489]
 const DEFAULT_ZOOM = 5
-const PHOTO_TYPES = ['visita_inicial', 'implementacion', 'seguimiento', 'otra']
+const PHOTO_TYPES = ['visita_inicial', 'render', 'implementacion', 'seguimiento', 'otra']
 const MAP_BASE_STYLES = {
   simple: {
     label: 'Simple',

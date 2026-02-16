@@ -7,6 +7,7 @@ export const STATE_META = {
 
 export const PHOTO_TYPE_LABELS = {
   visita_inicial: 'Visita inicial',
+  render: 'Renders',
   implementacion: 'Implementación',
   seguimiento: 'Seguimiento',
   otra: 'Otra'

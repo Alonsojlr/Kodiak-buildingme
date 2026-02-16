@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { ChevronLeft, ClipboardCheck, Wrench, ListTodo, FileText, Camera, MapPin, AlertTriangle, Plus, Clock, Eye, Loader2, Trash2, ZoomIn, ZoomOut, Edit2, Save } from 'lucide-react';
 import { getImplementacionesByTienda } from '../../api/audit-implementaciones';
 import { deleteAuditoria, getAuditoriasByTienda, getRespuestasByAuditoria } from '../../api/audit-auditorias';
@@ -9,13 +9,14 @@ import EjecutarAuditoria from './EjecutarAuditoria';
 
 const PHOTO_TYPE_LABELS = {
   visita_inicial: 'Visita Inicial',
+  render: 'Renders',
   implementacion: 'Implementación',
   seguimiento: 'Revisión',
   otra: 'Otra'
 };
 
-const PHOTO_TYPE_ORDER = ['visita_inicial', 'implementacion', 'seguimiento', 'otra'];
-const PHOTO_TYPES = ['visita_inicial', 'implementacion', 'seguimiento', 'otra'];
+const PHOTO_TYPE_ORDER = ['visita_inicial', 'render', 'implementacion', 'seguimiento', 'otra'];
+const PHOTO_TYPES = ['visita_inicial', 'render', 'implementacion', 'seguimiento', 'otra'];
 
 const DetalleTienda = ({ tienda, auditorias: initialAuditorias, implementaciones: initialImpl, tareas: initialTareas, plantillas, formatCurrency, user, hideFinancialInfo = false, onVolver, onReload }) => {
   const [activeSubTab, setActiveSubTab] = useState('resumen');
@@ -40,6 +41,8 @@ const DetalleTienda = ({ tienda, auditorias: initialAuditorias, implementaciones
     descripcion: '',
     files: []
   });
+  const [isDraggingPhotos, setIsDraggingPhotos] = useState(false);
+  const photoInputRef = useRef(null);
   const [photoCardMinWidth, setPhotoCardMinWidth] = useState(170);
   const [auditoriaDetalle, setAuditoriaDetalle] = useState(null);
   const [respuestasDetalle, setRespuestasDetalle] = useState([]);
@@ -143,6 +146,7 @@ const DetalleTienda = ({ tienda, auditorias: initialAuditorias, implementaciones
       });
       await refreshFotosTienda();
       setPhotoForm((prev) => ({ ...prev, titulo: '', descripcion: '', files: [] }));
+      setIsDraggingPhotos(false);
       alert('Fotos registradas correctamente');
     } catch (error) {
       console.error('Error subiendo fotos de tienda:', error);
@@ -150,6 +154,48 @@ const DetalleTienda = ({ tienda, auditorias: initialAuditorias, implementaciones
     } finally {
       setUploadingPhotos(false);
     }
+  };
+
+  const addFilesToPhotoForm = (files) => {
+    const incoming = Array.from(files || []);
+    if (!incoming.length) return;
+    setPhotoForm((prev) => {
+      const current = prev.files || [];
+      const dedup = [...current];
+      incoming.forEach((file) => {
+        const exists = dedup.some(
+          (f) =>
+            f.name === file.name &&
+            f.size === file.size &&
+            f.lastModified === file.lastModified
+        );
+        if (!exists) dedup.push(file);
+      });
+      return { ...prev, files: dedup };
+    });
+  };
+
+  const handlePhotoDragOver = (event) => {
+    event.preventDefault();
+    setIsDraggingPhotos(true);
+  };
+
+  const handlePhotoDragLeave = (event) => {
+    event.preventDefault();
+    setIsDraggingPhotos(false);
+  };
+
+  const handlePhotoDrop = (event) => {
+    event.preventDefault();
+    setIsDraggingPhotos(false);
+    addFilesToPhotoForm(event.dataTransfer?.files);
+  };
+
+  const handleRemoveSelectedFile = (index) => {
+    setPhotoForm((prev) => ({
+      ...prev,
+      files: (prev.files || []).filter((_, idx) => idx !== index)
+    }));
   };
 
   const handleStartEditPhoto = (foto) => {
@@ -775,54 +821,104 @@ const DetalleTienda = ({ tienda, auditorias: initialAuditorias, implementaciones
             />
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
+          <div className="bg-white rounded-xl shadow-sm p-4 space-y-4">
             <h4 className="font-semibold text-gray-800">Agregar fotos</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Tipo</label>
-                <select
-                  value={photoForm.tipo}
-                  onChange={(e) => setPhotoForm((prev) => ({ ...prev, tipo: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                >
-                  {PHOTO_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {PHOTO_TYPE_LABELS[type]}
-                    </option>
-                  ))}
-                </select>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Tipo</label>
+                  <select
+                    value={photoForm.tipo}
+                    onChange={(e) => setPhotoForm((prev) => ({ ...prev, tipo: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  >
+                    {PHOTO_TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {PHOTO_TYPE_LABELS[type]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Fecha</label>
+                  <input
+                    type="date"
+                    value={photoForm.fecha_evento}
+                    onChange={(e) => setPhotoForm((prev) => ({ ...prev, fecha_evento: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Título (opcional)</label>
+                  <input
+                    type="text"
+                    value={photoForm.titulo}
+                    onChange={(e) => setPhotoForm((prev) => ({ ...prev, titulo: e.target.value }))}
+                    placeholder="Ej: Render fachada principal"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Descripción</label>
+                  <textarea
+                    rows={3}
+                    value={photoForm.descripcion}
+                    onChange={(e) => setPhotoForm((prev) => ({ ...prev, descripcion: e.target.value }))}
+                    placeholder="Descripción opcional"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Fecha</label>
+
+              <div className="space-y-3">
                 <input
-                  type="date"
-                  value={photoForm.fecha_evento}
-                  onChange={(e) => setPhotoForm((prev) => ({ ...prev, fecha_evento: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => addFilesToPhotoForm(e.target.files)}
+                  className="hidden"
                 />
+                <button
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  onDragEnter={handlePhotoDragOver}
+                  onDragOver={handlePhotoDragOver}
+                  onDragLeave={handlePhotoDragLeave}
+                  onDrop={handlePhotoDrop}
+                  className={`w-full h-44 rounded-xl border-2 border-dashed transition-colors flex flex-col items-center justify-center text-center px-4 ${
+                    isDraggingPhotos
+                      ? 'border-[#45ad98] bg-[#45ad98]/10'
+                      : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
+                  }`}
+                >
+                  <Camera className="w-8 h-8 text-gray-500 mb-2" />
+                  <p className="text-sm font-semibold text-gray-700">Arrastra fotos aquí</p>
+                  <p className="text-xs text-gray-500 mt-1">o haz click para seleccionar archivos</p>
+                </button>
+
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-2 min-h-[84px] max-h-[120px] overflow-y-auto">
+                  {(photoForm.files || []).length === 0 ? (
+                    <p className="text-xs text-gray-500">Sin archivos seleccionados</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {photoForm.files.map((file, idx) => (
+                        <div key={`${file.name}-${file.size}-${idx}`} className="flex items-center justify-between gap-2">
+                          <p className="text-xs text-gray-700 truncate">{file.name}</p>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSelectedFile(idx)}
+                            className="text-[11px] text-red-700 hover:text-red-900"
+                          >
+                            Quitar
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-            <input
-              type="text"
-              value={photoForm.titulo}
-              onChange={(e) => setPhotoForm((prev) => ({ ...prev, titulo: e.target.value }))}
-              placeholder="Título opcional"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-            />
-            <textarea
-              rows={2}
-              value={photoForm.descripcion}
-              onChange={(e) => setPhotoForm((prev) => ({ ...prev, descripcion: e.target.value }))}
-              placeholder="Descripción opcional"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-            />
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={(e) => setPhotoForm((prev) => ({ ...prev, files: Array.from(e.target.files || []) }))}
-              className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm file:font-medium"
-            />
             <button
               onClick={handleUploadPhotos}
               disabled={uploadingPhotos}
