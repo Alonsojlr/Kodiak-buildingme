@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
-import { AlertTriangle, Camera, Calendar, CheckCircle2, Filter, Loader2, MapPin, Search, Store, XCircle } from 'lucide-react'
-import { getStoreStatusSnapshot, getTiendaFotos, uploadTiendaFotosBatch } from '../../api/audit-mapa'
+import { AlertTriangle, Camera, Calendar, CheckCircle2, Edit2, Filter, Loader2, MapPin, Save, Search, Store, Trash2, XCircle } from 'lucide-react'
+import { deleteTiendaFoto, getStoreStatusSnapshot, getTiendaFotos, updateTiendaFoto, uploadTiendaFotosBatch } from '../../api/audit-mapa'
 import {
   PHOTO_TYPE_LABELS,
   STATE_META,
@@ -111,11 +111,21 @@ const MapaTab = ({ user, hideFinancialInfo = false, onOpenStore }) => {
   const [photoForm, setPhotoForm] = useState({
     tipo: 'visita_inicial',
     fecha_evento: new Date().toISOString().split('T')[0],
+    titulo: '',
     descripcion: '',
     files: []
   })
   const [loadingPhotos, setLoadingPhotos] = useState(false)
   const [uploadingPhotos, setUploadingPhotos] = useState(false)
+  const [savingPhotoEdit, setSavingPhotoEdit] = useState(false)
+  const [deletingPhotoId, setDeletingPhotoId] = useState(null)
+  const [editingPhotoId, setEditingPhotoId] = useState(null)
+  const [editingPhotoForm, setEditingPhotoForm] = useState({
+    tipo: 'otra',
+    fecha_evento: new Date().toISOString().split('T')[0],
+    titulo: '',
+    descripcion: ''
+  })
   const [photos, setPhotos] = useState([])
 
   const canCreateAuditoria = ['admin', 'comercial', 'trade_marketing', 'auditor'].includes(user?.role)
@@ -383,6 +393,7 @@ const MapaTab = ({ user, hideFinancialInfo = false, onOpenStore }) => {
       await uploadTiendaFotosBatch(selectedStore.store_id, photoForm.files, {
         tipo: photoForm.tipo,
         fecha_evento: photoForm.fecha_evento,
+        titulo: photoForm.titulo,
         descripcion: photoForm.descripcion,
         created_by: user?.id || null,
         created_by_name: user?.name || null
@@ -390,13 +401,68 @@ const MapaTab = ({ user, hideFinancialInfo = false, onOpenStore }) => {
 
       const updatedPhotos = await getTiendaFotos(selectedStore.store_id)
       setPhotos(updatedPhotos || [])
-      setPhotoForm((prev) => ({ ...prev, descripcion: '', files: [] }))
+      setPhotoForm((prev) => ({ ...prev, titulo: '', descripcion: '', files: [] }))
       alert('Fotos registradas correctamente')
     } catch (e) {
       console.error('Error subiendo fotos de tienda:', e)
       alert('Error al subir fotos de la tienda')
     } finally {
       setUploadingPhotos(false)
+    }
+  }
+
+  const handleStartEditPhoto = (photo) => {
+    setEditingPhotoId(photo.id)
+    setEditingPhotoForm({
+      tipo: photo.tipo || 'otra',
+      fecha_evento: photo.fecha_evento || new Date().toISOString().split('T')[0],
+      titulo: photo.titulo || '',
+      descripcion: photo.descripcion || ''
+    })
+  }
+
+  const handleCancelEditPhoto = () => {
+    setEditingPhotoId(null)
+    setEditingPhotoForm({
+      tipo: 'otra',
+      fecha_evento: new Date().toISOString().split('T')[0],
+      titulo: '',
+      descripcion: ''
+    })
+  }
+
+  const handleSaveEditPhoto = async () => {
+    if (!editingPhotoId) return
+    try {
+      setSavingPhotoEdit(true)
+      await updateTiendaFoto(editingPhotoId, editingPhotoForm)
+      const updatedPhotos = await getTiendaFotos(selectedStore.store_id)
+      setPhotos(updatedPhotos || [])
+      handleCancelEditPhoto()
+      alert('Foto actualizada correctamente')
+    } catch (error) {
+      console.error('Error actualizando foto de tienda:', error)
+      alert('No se pudo actualizar la foto')
+    } finally {
+      setSavingPhotoEdit(false)
+    }
+  }
+
+  const handleDeletePhoto = async (photo) => {
+    if (!photo?.id) return
+    if (!window.confirm('¿Eliminar esta foto? Esta acción no se puede deshacer.')) return
+    try {
+      setDeletingPhotoId(photo.id)
+      await deleteTiendaFoto(photo)
+      const updatedPhotos = await getTiendaFotos(selectedStore.store_id)
+      setPhotos(updatedPhotos || [])
+      if (editingPhotoId === photo.id) handleCancelEditPhoto()
+      alert('Foto eliminada')
+    } catch (error) {
+      console.error('Error eliminando foto de tienda:', error)
+      alert('No se pudo eliminar la foto')
+    } finally {
+      setDeletingPhotoId(null)
     }
   }
 
@@ -717,6 +783,14 @@ const MapaTab = ({ user, hideFinancialInfo = false, onOpenStore }) => {
                   </div>
 
                   <textarea
+                    value={photoForm.titulo}
+                    onChange={(e) => setPhotoForm((prev) => ({ ...prev, titulo: e.target.value }))}
+                    rows={1}
+                    placeholder="Título opcional"
+                    className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
+                  />
+
+                  <textarea
                     value={photoForm.descripcion}
                     onChange={(e) => setPhotoForm((prev) => ({ ...prev, descripcion: e.target.value }))}
                     rows={2}
@@ -771,19 +845,95 @@ const MapaTab = ({ user, hideFinancialInfo = false, onOpenStore }) => {
                           )}
                           <div className="grid grid-cols-3 gap-2">
                             {group.items.map((photo) => (
-                              <a
+                              <div
                                 key={photo.id}
-                                href={photo.foto_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="block rounded-lg overflow-hidden border border-gray-200"
+                                className="rounded-lg overflow-hidden border border-gray-200 bg-white"
                               >
-                                <img
-                                  src={photo.foto_url}
-                                  alt={PHOTO_TYPE_LABELS[group.tipo] || 'Foto tienda'}
-                                  className="w-full h-20 object-cover"
-                                />
-                              </a>
+                                <a href={photo.foto_url} target="_blank" rel="noreferrer" className="block">
+                                  <img
+                                    src={photo.foto_url}
+                                    alt={PHOTO_TYPE_LABELS[group.tipo] || 'Foto tienda'}
+                                    className="w-full h-20 object-cover"
+                                  />
+                                </a>
+                                <div className="px-2 py-1 border-t flex items-center justify-between gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleStartEditPhoto(photo)}
+                                    className="text-[11px] text-blue-700 hover:text-blue-900 inline-flex items-center gap-1"
+                                  >
+                                    <Edit2 className="w-3 h-3" />
+                                    Editar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeletePhoto(photo)}
+                                    disabled={deletingPhotoId === photo.id}
+                                    className={`text-[11px] inline-flex items-center gap-1 ${
+                                      deletingPhotoId === photo.id ? 'text-gray-400 cursor-not-allowed' : 'text-red-700 hover:text-red-900'
+                                    }`}
+                                  >
+                                    {deletingPhotoId === photo.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                                    Eliminar
+                                  </button>
+                                </div>
+
+                                {editingPhotoId === photo.id && (
+                                  <div className="px-2 py-2 border-t space-y-2 bg-gray-50">
+                                    <select
+                                      value={editingPhotoForm.tipo}
+                                      onChange={(e) => setEditingPhotoForm((prev) => ({ ...prev, tipo: e.target.value }))}
+                                      className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs"
+                                    >
+                                      {PHOTO_TYPES.map((type) => (
+                                        <option key={type} value={type}>
+                                          {PHOTO_TYPE_LABELS[type]}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <input
+                                      type="date"
+                                      value={editingPhotoForm.fecha_evento}
+                                      onChange={(e) => setEditingPhotoForm((prev) => ({ ...prev, fecha_evento: e.target.value }))}
+                                      className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={editingPhotoForm.titulo}
+                                      onChange={(e) => setEditingPhotoForm((prev) => ({ ...prev, titulo: e.target.value }))}
+                                      placeholder="Título"
+                                      className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs"
+                                    />
+                                    <textarea
+                                      rows={2}
+                                      value={editingPhotoForm.descripcion}
+                                      onChange={(e) => setEditingPhotoForm((prev) => ({ ...prev, descripcion: e.target.value }))}
+                                      placeholder="Descripción"
+                                      className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs"
+                                    />
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={handleSaveEditPhoto}
+                                        disabled={savingPhotoEdit}
+                                        className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1 ${
+                                          savingPhotoEdit ? 'bg-gray-200 text-gray-600' : 'bg-[#235250] text-white'
+                                        }`}
+                                      >
+                                        {savingPhotoEdit ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                                        Guardar
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={handleCancelEditPhoto}
+                                        className="flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold bg-gray-200 text-gray-700"
+                                      >
+                                        Cancelar
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             ))}
                           </div>
                         </div>
