@@ -13024,7 +13024,7 @@ const Dashboard = ({ user, onLogout }) => {
   // Permisos por rol
   const hasAccess = (module) => {
     if (isAdminLike) return true;
-    if (user.role === 'compras' && ['protocolos', 'ordenes', 'proveedores', 'inventario', 'auditorias'].includes(module)) return true;
+    if (user.role === 'compras' && ['protocolos', 'gantt', 'ordenes', 'proveedores', 'inventario', 'auditorias'].includes(module)) return true;
     if (user.role === 'finanzas' && ['cotizaciones', 'clientes', 'facturacion'].includes(module)) return true;
     if (['auditor', 'trade_marketing'].includes(user.role) && module === 'auditorias') return true;
     return false;
@@ -13040,7 +13040,7 @@ const Dashboard = ({ user, onLogout }) => {
     { id: 'dashboard', name: 'Dashboard', icon: BarChart3, roles: ['admin', 'comercial', 'finanzas'] },
     { id: 'cotizaciones', name: 'Cotizaciones', icon: FileText, roles: ['admin', 'comercial', 'finanzas'] },
     { id: 'protocolos', name: 'Protocolos de Compra', icon: Package, roles: ['admin', 'comercial', 'compras'] },
-    { id: 'gantt', name: 'Carta Gantt', icon: Calendar, roles: ['admin', 'comercial'] },
+    { id: 'gantt', name: 'Carta Gantt', icon: Calendar, roles: ['admin', 'comercial', 'compras'] },
     { id: 'ordenes', name: 'Órdenes de Compra', icon: ShoppingCart, roles: ['admin', 'comercial', 'compras'] },
     { id: 'inventario', name: 'Bodega/Inventario', icon: Package, roles: ['admin', 'comercial', 'compras'] },
     { id: 'proveedores', name: 'Proveedores', icon: Building2, roles: ['admin', 'comercial', 'compras'] },
