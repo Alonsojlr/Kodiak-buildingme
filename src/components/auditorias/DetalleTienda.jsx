@@ -43,7 +43,7 @@ const DetalleTienda = ({ tienda, auditorias: initialAuditorias, implementaciones
   });
   const [isDraggingPhotos, setIsDraggingPhotos] = useState(false);
   const photoInputRef = useRef(null);
-  const [photoCardMinWidth, setPhotoCardMinWidth] = useState(170);
+  const [photoCardMinWidth, setPhotoCardMinWidth] = useState(200);
   const [auditoriaDetalle, setAuditoriaDetalle] = useState(null);
   const [respuestasDetalle, setRespuestasDetalle] = useState([]);
   const [loadingAuditoriaDetalleId, setLoadingAuditoriaDetalleId] = useState(null);
@@ -277,6 +277,16 @@ const DetalleTienda = ({ tienda, auditorias: initialAuditorias, implementaciones
       };
     });
   }, [fotosTienda]);
+
+  const photoSectionsColumns = useMemo(() => {
+    const left = [];
+    const right = [];
+    fotosAgrupadasPorTipo.forEach((section, idx) => {
+      if (idx % 2 === 0) left.push(section);
+      else right.push(section);
+    });
+    return [left, right];
+  }, [fotosAgrupadasPorTipo]);
 
   if (showAuditoria) {
     return (
@@ -806,14 +816,14 @@ const DetalleTienda = ({ tienda, auditorias: initialAuditorias, implementaciones
                 <span>Tamaño de fotos</span>
               </div>
               <div className="flex items-center gap-2 text-sm text-gray-600">
-                <span>{photoCardMinWidth < 150 ? 'Chicas' : photoCardMinWidth > 210 ? 'Grandes' : 'Medianas'}</span>
+                <span>{photoCardMinWidth < 190 ? 'Chicas' : photoCardMinWidth > 250 ? 'Grandes' : 'Medianas'}</span>
                 <ZoomIn className="w-4 h-4 text-gray-500" />
               </div>
             </div>
             <input
               type="range"
-              min="120"
-              max="260"
+              min="150"
+              max="320"
               step="10"
               value={photoCardMinWidth}
               onChange={(e) => setPhotoCardMinWidth(Number(e.target.value))}
@@ -945,136 +955,144 @@ const DetalleTienda = ({ tienda, auditorias: initialAuditorias, implementaciones
             </div>
           )}
 
-          {!loadingFotosTienda && fotosTienda.length > 0 && fotosAgrupadasPorTipo.map((section) => (
-            <div key={section.type} className="bg-white rounded-xl shadow-sm p-5">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="font-bold text-gray-800">{section.label}</h4>
-                <span className="text-xs text-gray-500">{section.total} foto(s)</span>
-              </div>
-
-              {section.groups.length === 0 ? (
-                <p className="text-sm text-gray-400">Sin fotos en esta categoría.</p>
-              ) : (
-                <div className="space-y-4">
-                  {section.groups.map((group) => (
-                    <div key={`${section.type}-${group.fecha}`} className="border border-gray-200 rounded-xl p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-sm font-semibold text-gray-700">
-                          {group.fecha === 'sin_fecha'
-                            ? 'Fecha no registrada'
-                            : new Date(group.fecha).toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })}
-                        </p>
-                        <span className="text-xs text-gray-500">{group.fotos.length} foto(s)</span>
+          {!loadingFotosTienda && fotosTienda.length > 0 && (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              {photoSectionsColumns.map((columnSections, columnIndex) => (
+                <div key={`photo-column-${columnIndex}`} className="space-y-4">
+                  {columnSections.map((section) => (
+                    <div key={section.type} className="bg-white rounded-xl shadow-sm p-6">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-bold text-gray-800">{section.label}</h4>
+                        <span className="text-xs text-gray-500">{section.total} foto(s)</span>
                       </div>
 
-                      <div
-                        className="grid gap-3"
-                        style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${photoCardMinWidth}px, 1fr))` }}
-                      >
-                        {group.fotos.map((foto) => (
-                          <div
-                            key={foto.id}
-                            className="rounded-lg overflow-hidden border border-gray-200 bg-white"
-                          >
-                            <button
-                              type="button"
-                              onClick={() => setLightboxImage(foto.foto_url)}
-                              className="relative w-full focus:outline-none"
-                              title="Ver foto"
-                            >
-                              <img
-                                src={foto.foto_url}
-                                alt={section.label}
-                                className="w-full object-cover hover:opacity-90 transition-opacity"
-                                style={{ aspectRatio: '1 / 1' }}
-                              />
-                            </button>
-                            <div className="px-2 py-1 border-t flex items-center justify-between gap-1">
-                              <button
-                                type="button"
-                                onClick={() => handleStartEditPhoto(foto)}
-                                className="text-[11px] text-blue-700 hover:text-blue-900 inline-flex items-center gap-1"
-                              >
-                                <Edit2 className="w-3 h-3" />
-                                Editar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeletePhoto(foto)}
-                                disabled={deletingPhotoId === foto.id}
-                                className={`text-[11px] inline-flex items-center gap-1 ${
-                                  deletingPhotoId === foto.id ? 'text-gray-400 cursor-not-allowed' : 'text-red-700 hover:text-red-900'
-                                }`}
-                              >
-                                {deletingPhotoId === foto.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                                Eliminar
-                              </button>
-                            </div>
-
-                            {editingPhotoId === foto.id && (
-                              <div className="px-2 py-2 border-t bg-gray-50 space-y-2">
-                                <select
-                                  value={editingPhotoForm.tipo}
-                                  onChange={(e) => setEditingPhotoForm((prev) => ({ ...prev, tipo: e.target.value }))}
-                                  className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs"
-                                >
-                                  {PHOTO_TYPES.map((type) => (
-                                    <option key={type} value={type}>
-                                      {PHOTO_TYPE_LABELS[type]}
-                                    </option>
-                                  ))}
-                                </select>
-                                <input
-                                  type="date"
-                                  value={editingPhotoForm.fecha_evento}
-                                  onChange={(e) => setEditingPhotoForm((prev) => ({ ...prev, fecha_evento: e.target.value }))}
-                                  className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs"
-                                />
-                                <input
-                                  type="text"
-                                  value={editingPhotoForm.titulo}
-                                  onChange={(e) => setEditingPhotoForm((prev) => ({ ...prev, titulo: e.target.value }))}
-                                  placeholder="Título"
-                                  className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs"
-                                />
-                                <textarea
-                                  rows={2}
-                                  value={editingPhotoForm.descripcion}
-                                  onChange={(e) => setEditingPhotoForm((prev) => ({ ...prev, descripcion: e.target.value }))}
-                                  placeholder="Descripción"
-                                  className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs"
-                                />
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={handleSaveEditPhoto}
-                                    disabled={savingPhotoEdit}
-                                    className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1 ${
-                                      savingPhotoEdit ? 'bg-gray-200 text-gray-600' : 'bg-[#235250] text-white'
-                                    }`}
-                                  >
-                                    {savingPhotoEdit ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                                    Guardar
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={handleCancelEditPhoto}
-                                    className="flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold bg-gray-200 text-gray-700"
-                                  >
-                                    Cancelar
-                                  </button>
-                                </div>
+                      {section.groups.length === 0 ? (
+                        <p className="text-sm text-gray-400">Sin fotos en esta categoría.</p>
+                      ) : (
+                        <div className="space-y-4">
+                          {section.groups.map((group) => (
+                            <div key={`${section.type}-${group.fecha}`} className="border border-gray-200 rounded-xl p-4">
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-sm font-semibold text-gray-700">
+                                  {group.fecha === 'sin_fecha'
+                                    ? 'Fecha no registrada'
+                                    : new Date(group.fecha).toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                </p>
+                                <span className="text-xs text-gray-500">{group.fotos.length} foto(s)</span>
                               </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
+
+                              <div
+                                className="grid gap-3"
+                                style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${photoCardMinWidth}px, 1fr))` }}
+                              >
+                                {group.fotos.map((foto) => (
+                                  <div
+                                    key={foto.id}
+                                    className="rounded-lg overflow-hidden border border-gray-200 bg-white"
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => setLightboxImage(foto.foto_url)}
+                                      className="relative w-full focus:outline-none"
+                                      title="Ver foto"
+                                    >
+                                      <img
+                                        src={foto.foto_url}
+                                        alt={section.label}
+                                        className="w-full object-cover hover:opacity-90 transition-opacity"
+                                        style={{ aspectRatio: '1 / 1' }}
+                                      />
+                                    </button>
+                                    <div className="px-2 py-1 border-t flex items-center justify-between gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStartEditPhoto(foto)}
+                                        className="text-[11px] text-blue-700 hover:text-blue-900 inline-flex items-center gap-1"
+                                      >
+                                        <Edit2 className="w-3 h-3" />
+                                        Editar
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeletePhoto(foto)}
+                                        disabled={deletingPhotoId === foto.id}
+                                        className={`text-[11px] inline-flex items-center gap-1 ${
+                                          deletingPhotoId === foto.id ? 'text-gray-400 cursor-not-allowed' : 'text-red-700 hover:text-red-900'
+                                        }`}
+                                      >
+                                        {deletingPhotoId === foto.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                                        Eliminar
+                                      </button>
+                                    </div>
+
+                                    {editingPhotoId === foto.id && (
+                                      <div className="px-2 py-2 border-t bg-gray-50 space-y-2">
+                                        <select
+                                          value={editingPhotoForm.tipo}
+                                          onChange={(e) => setEditingPhotoForm((prev) => ({ ...prev, tipo: e.target.value }))}
+                                          className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs"
+                                        >
+                                          {PHOTO_TYPES.map((type) => (
+                                            <option key={type} value={type}>
+                                              {PHOTO_TYPE_LABELS[type]}
+                                            </option>
+                                          ))}
+                                        </select>
+                                        <input
+                                          type="date"
+                                          value={editingPhotoForm.fecha_evento}
+                                          onChange={(e) => setEditingPhotoForm((prev) => ({ ...prev, fecha_evento: e.target.value }))}
+                                          className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs"
+                                        />
+                                        <input
+                                          type="text"
+                                          value={editingPhotoForm.titulo}
+                                          onChange={(e) => setEditingPhotoForm((prev) => ({ ...prev, titulo: e.target.value }))}
+                                          placeholder="Título"
+                                          className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs"
+                                        />
+                                        <textarea
+                                          rows={2}
+                                          value={editingPhotoForm.descripcion}
+                                          onChange={(e) => setEditingPhotoForm((prev) => ({ ...prev, descripcion: e.target.value }))}
+                                          placeholder="Descripción"
+                                          className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs"
+                                        />
+                                        <div className="flex items-center gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={handleSaveEditPhoto}
+                                            disabled={savingPhotoEdit}
+                                            className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1 ${
+                                              savingPhotoEdit ? 'bg-gray-200 text-gray-600' : 'bg-[#235250] text-white'
+                                            }`}
+                                          >
+                                            {savingPhotoEdit ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                                            Guardar
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={handleCancelEditPhoto}
+                                            className="flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold bg-gray-200 text-gray-700"
+                                          >
+                                            Cancelar
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
-              )}
+              ))}
             </div>
-          ))}
+          )}
         </div>
       )}
 
