@@ -1,15 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ChevronLeft, ClipboardCheck, Wrench, ListTodo, FileText, Camera, MapPin, AlertTriangle, Plus, Clock, Eye, Loader2, Trash2 } from 'lucide-react';
 import { getImplementacionesByTienda } from '../../api/audit-implementaciones';
 import { deleteAuditoria, getAuditoriasByTienda, getRespuestasByAuditoria } from '../../api/audit-auditorias';
 import { deleteTarea, getTareasByTienda } from '../../api/audit-tareas';
 import { getAjustesByTienda } from '../../api/audit-tareas';
+import { getTiendaFotos } from '../../api/audit-mapa';
 import EjecutarAuditoria from './EjecutarAuditoria';
+
+const PHOTO_TYPE_LABELS = {
+  visita_inicial: 'Visita Inicial',
+  implementacion: 'Implementación',
+  seguimiento: 'Revisión',
+  otra: 'Otra'
+};
+
+const PHOTO_TYPE_ORDER = ['visita_inicial', 'implementacion', 'seguimiento', 'otra'];
 
 const DetalleTienda = ({ tienda, auditorias: initialAuditorias, implementaciones: initialImpl, tareas: initialTareas, plantillas, formatCurrency, user, hideFinancialInfo = false, onVolver, onReload }) => {
   const [activeSubTab, setActiveSubTab] = useState('resumen');
   const [showAuditoria, setShowAuditoria] = useState(false);
   const [ajustes, setAjustes] = useState([]);
+  const [fotosTienda, setFotosTienda] = useState([]);
+  const [loadingFotosTienda, setLoadingFotosTienda] = useState(false);
   const [auditoriaDetalle, setAuditoriaDetalle] = useState(null);
   const [respuestasDetalle, setRespuestasDetalle] = useState([]);
   const [loadingAuditoriaDetalleId, setLoadingAuditoriaDetalleId] = useState(null);
@@ -39,6 +51,30 @@ const DetalleTienda = ({ tienda, auditorias: initialAuditorias, implementaciones
     loadAjustes();
   }, [tienda.id]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadFotos = async () => {
+      if (activeSubTab !== 'fotos') return;
+      setLoadingFotosTienda(true);
+      try {
+        const data = await getTiendaFotos(tienda.id);
+        if (!cancelled) {
+          setFotosTienda(data || []);
+        }
+      } catch (error) {
+        console.error('Error cargando fotos de tienda:', error);
+      } finally {
+        if (!cancelled) setLoadingFotosTienda(false);
+      }
+    };
+
+    loadFotos();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSubTab, tienda.id]);
+
   const diasSinAuditoria = tienda.last_audit_at
     ? Math.floor((new Date() - new Date(tienda.last_audit_at)) / (1000 * 60 * 60 * 24))
     : null;
@@ -54,6 +90,7 @@ const DetalleTienda = ({ tienda, auditorias: initialAuditorias, implementaciones
     { id: 'resumen', name: 'Resumen' },
     ...(!hideFinancialInfo ? [{ id: 'implementacion', name: 'Implementación' }] : []),
     { id: 'auditorias', name: 'Auditorías' },
+    { id: 'fotos', name: 'Fotos' },
     { id: 'ajustes', name: 'Ajustes' },
     { id: 'tareas', name: 'Tareas' }
   ];
@@ -63,6 +100,34 @@ const DetalleTienda = ({ tienda, auditorias: initialAuditorias, implementaciones
       setActiveSubTab('resumen');
     }
   }, [hideFinancialInfo, activeSubTab]);
+
+  const fotosAgrupadasPorTipo = useMemo(() => {
+    const groupedByType = PHOTO_TYPE_ORDER.reduce((acc, type) => {
+      acc[type] = {};
+      return acc;
+    }, {});
+
+    (fotosTienda || []).forEach((foto) => {
+      const type = PHOTO_TYPE_ORDER.includes(foto.tipo) ? foto.tipo : 'otra';
+      const dateKey = foto.fecha_evento || 'sin_fecha';
+      if (!groupedByType[type][dateKey]) groupedByType[type][dateKey] = [];
+      groupedByType[type][dateKey].push(foto);
+    });
+
+    return PHOTO_TYPE_ORDER.map((type) => {
+      const byDate = groupedByType[type];
+      const fechas = Object.keys(byDate).sort((a, b) => new Date(b) - new Date(a));
+      return {
+        type,
+        label: PHOTO_TYPE_LABELS[type],
+        groups: fechas.map((fecha) => ({
+          fecha,
+          fotos: byDate[fecha]
+        })),
+        total: fechas.reduce((acc, fecha) => acc + byDate[fecha].length, 0)
+      };
+    });
+  }, [fotosTienda]);
 
   if (showAuditoria) {
     return (
@@ -583,6 +648,71 @@ const DetalleTienda = ({ tienda, auditorias: initialAuditorias, implementaciones
         </div>
       )}
 
+      {activeSubTab === 'fotos' && (
+        <div className="space-y-4">
+          {loadingFotosTienda && (
+            <div className="bg-white rounded-xl shadow-sm p-8 text-center">
+              <Loader2 className="w-8 h-8 text-gray-400 mx-auto mb-3 animate-spin" />
+              <p className="text-gray-500">Cargando fotos...</p>
+            </div>
+          )}
+
+          {!loadingFotosTienda && fotosTienda.length === 0 && (
+            <div className="bg-white rounded-xl shadow-sm p-8 text-center">
+              <Camera className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-500">No hay fotos registradas para esta tienda.</p>
+              <p className="text-xs text-gray-400 mt-1">Puedes subirlas desde el módulo Mapa en el detalle de tienda.</p>
+            </div>
+          )}
+
+          {!loadingFotosTienda && fotosTienda.length > 0 && fotosAgrupadasPorTipo.map((section) => (
+            <div key={section.type} className="bg-white rounded-xl shadow-sm p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-bold text-gray-800">{section.label}</h4>
+                <span className="text-xs text-gray-500">{section.total} foto(s)</span>
+              </div>
+
+              {section.groups.length === 0 ? (
+                <p className="text-sm text-gray-400">Sin fotos en esta categoría.</p>
+              ) : (
+                <div className="space-y-4">
+                  {section.groups.map((group) => (
+                    <div key={`${section.type}-${group.fecha}`} className="border border-gray-200 rounded-xl p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm font-semibold text-gray-700">
+                          {group.fecha === 'sin_fecha'
+                            ? 'Fecha no registrada'
+                            : new Date(group.fecha).toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })}
+                        </p>
+                        <span className="text-xs text-gray-500">{group.fotos.length} foto(s)</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {group.fotos.map((foto) => (
+                          <button
+                            key={foto.id}
+                            type="button"
+                            onClick={() => setLightboxImage(foto.foto_url)}
+                            className="relative rounded-lg overflow-hidden border border-gray-200 focus:outline-none"
+                            title="Ver foto"
+                          >
+                            <img
+                              src={foto.foto_url}
+                              alt={section.label}
+                              className="w-full h-28 object-cover hover:opacity-90 transition-opacity"
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       {activeSubTab === 'ajustes' && (
         <div className="space-y-3">
           {ajustes.length > 0 ? ajustes.map(aj => (
@@ -664,6 +794,27 @@ const DetalleTienda = ({ tienda, auditorias: initialAuditorias, implementaciones
               <p className="text-gray-500">No hay tareas registradas</p>
             </div>
           )}
+        </div>
+      )}
+
+      {lightboxImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
+          onClick={() => setLightboxImage(null)}
+        >
+          <div
+            className="relative max-w-5xl max-h-[90vh] w-full flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setLightboxImage(null)}
+              className="absolute top-2 right-2 z-10 px-3 py-1 rounded-lg bg-white/90 text-gray-800 text-sm font-semibold hover:bg-white"
+            >
+              Cerrar
+            </button>
+            <img src={lightboxImage} alt="Foto ampliada" className="max-w-full max-h-[88vh] object-contain rounded-lg shadow-2xl" />
+          </div>
         </div>
       )}
     </div>
