@@ -43,6 +43,21 @@ const sanitizeStorageFileName = (name) =>
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-zA-Z0-9._-]/g, '_');
 
+const formatRutInput = (value) => {
+  const clean = String(value || '')
+    .replace(/[^0-9kK]/g, '')
+    .toUpperCase()
+    .slice(0, 9);
+
+  if (!clean) return '';
+  if (clean.length === 1) return clean;
+
+  const dv = clean.slice(-1);
+  const body = clean.slice(0, -1);
+  const formattedBody = body.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `${formattedBody}-${dv}`;
+};
+
 const uploadProtocoloDocumentoPDF = async ({ protocoloId, tipo, file }) => {
   if (!protocoloId) throw new Error('Falta el ID del protocolo');
   if (!file) throw new Error('No se seleccionó archivo');
@@ -5536,7 +5551,7 @@ const NuevoProveedorModal = ({ onClose, onSave }) => {
                   type="text"
                   required
                   value={formData.rut}
-                  onChange={(e) => setFormData({...formData, rut: e.target.value})}
+                  onChange={(e) => setFormData({...formData, rut: formatRutInput(e.target.value)})}
                   className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98]"
                   placeholder="12.345.678-9"
                 />
@@ -5753,7 +5768,7 @@ const EditarProveedorModal = ({ proveedor, onClose, onSave }) => {
                   type="text"
                   required
                   value={formData.rut}
-                  onChange={(e) => setFormData({...formData, rut: e.target.value})}
+                  onChange={(e) => setFormData({...formData, rut: formatRutInput(e.target.value)})}
                   className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98]"
                 />
               </div>
@@ -8195,8 +8210,8 @@ const VistaDetalleProtocolo = ({
             </button>
             <button
               onClick={onSubirFacturaClick}
-              className="px-6 py-3 bg-white border-2 rounded-xl font-semibold hover:bg-gray-50 transition-all disabled:opacity-60"
-              style={{ borderColor: '#45ad98', color: '#235250' }}
+              className="px-6 py-3 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-60"
+              style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
               disabled={uploadingDocType === 'factura'}
             >
               <FileText className="w-5 h-5 inline mr-2" />
@@ -8204,8 +8219,8 @@ const VistaDetalleProtocolo = ({
             </button>
             <button
               onClick={() => ocFileInputRef.current?.click()}
-              className="px-6 py-3 bg-white border-2 rounded-xl font-semibold hover:bg-gray-50 transition-all disabled:opacity-60"
-              style={{ borderColor: '#45ad98', color: '#235250' }}
+              className="px-6 py-3 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-60"
+              style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
               disabled={uploadingDocType === 'oc'}
             >
               <FileText className="w-5 h-5 inline mr-2" />
@@ -10539,7 +10554,7 @@ const NuevoClienteModal = ({ onClose, onSave }) => {
                   type="text"
                   required
                   value={formData.rut}
-                  onChange={(e) => setFormData({...formData, rut: e.target.value})}
+                  onChange={(e) => setFormData({...formData, rut: formatRutInput(e.target.value)})}
                   className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98]"
                   placeholder="12.345.678-9"
                 />
@@ -10931,7 +10946,7 @@ const EditarClienteModal = ({ cliente, onClose, onSave }) => {
                   type="text"
                   required
                   value={formData.rut}
-                  onChange={(e) => setFormData({...formData, rut: e.target.value})}
+                  onChange={(e) => setFormData({...formData, rut: formatRutInput(e.target.value)})}
                   className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98]"
                 />
               </div>
