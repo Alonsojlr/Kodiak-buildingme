@@ -35,6 +35,47 @@ const alert = (message) => {
   notifyToast(message, type);
 };
 
+const PROTOCOLO_DOCS_BUCKET = 'audit-fotos';
+
+const sanitizeStorageFileName = (name) =>
+  String(name || 'documento.pdf')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]/g, '_');
+
+const uploadProtocoloDocumentoPDF = async ({ protocoloId, tipo, file }) => {
+  if (!protocoloId) throw new Error('Falta el ID del protocolo');
+  if (!file) throw new Error('No se seleccionó archivo');
+
+  const safeName = sanitizeStorageFileName(file.name || 'documento.pdf');
+  const path = `protocolos/${protocoloId}/${tipo}/${Date.now()}-${safeName}`;
+
+  const { data: uploadData, error: uploadError } = await supabase.storage
+    .from(PROTOCOLO_DOCS_BUCKET)
+    .upload(path, file, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: 'application/pdf'
+    });
+
+  if (uploadError) throw uploadError;
+
+  const { data: publicData } = supabase.storage
+    .from(PROTOCOLO_DOCS_BUCKET)
+    .getPublicUrl(uploadData.path);
+
+  return publicData.publicUrl;
+};
+
+const getProtocoloDocStoragePathFromPublicUrl = (url) => {
+  if (!url) return null;
+  const marker = `/storage/v1/object/public/${PROTOCOLO_DOCS_BUCKET}/`;
+  const idx = String(url).indexOf(marker);
+  if (idx === -1) return null;
+  const rawPath = String(url).slice(idx + marker.length).split('?')[0];
+  return decodeURIComponent(rawPath);
+};
+
 const playNotificationSound = () => {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -6237,6 +6278,7 @@ const ProtocolosModule = ({
     total: parseFloat(factura.total) || 0,
     tipoDoc: factura.tipo_doc || 'Factura',
     estado: factura.estado || 'Emitida',
+    docUrl: factura.doc_url || '',
     createdAt: factura.created_at || ''
   });
 
@@ -6428,6 +6470,9 @@ const ProtocolosModule = ({
         const cotizacion =
           cotizacionesByFolio.get(String(p.folio)) ??
           cotizacionesByNumero.get(normalizarNumero(p.numero_cotizacion));
+        const netoCotizacion = cotizacion ? calcularNetoCotizacion(cotizacion) : undefined;
+        const netoProtocoloGuardado = parseFloat(p.monto_neto);
+        const netoEfectivo = netoCotizacion ?? (Number.isFinite(netoProtocoloGuardado) ? netoProtocoloGuardado : undefined);
         return {
           id: p.id,
           folio: p.folio,
@@ -6437,14 +6482,16 @@ const ProtocolosModule = ({
           rutCliente: p.clientes?.rut || '',
           tipo: p.tipo,
           ocCliente: p.oc_cliente,
+          ocClienteDocUrl: p.oc_cliente_doc_url || null,
+          facturaBmDocUrl: p.factura_bm_doc_url || null,
           estado: p.estado,
           unidadNegocio: p.unidad_negocio,
           fechaCreacion: p.fecha_creacion,
           fechaInicioProduccion: p.fecha_inicio_produccion || null,
           fechaEntrega: p.fecha_entrega || null,
           montoTotal: parseFloat(p.monto_total),
-          montoNeto: parseFloat(p.monto_neto) || undefined,
-          montoNetoCotizacion: p.monto_neto ? parseFloat(p.monto_neto) : (cotizacion ? calcularNetoCotizacion(cotizacion) : undefined),
+          montoNeto: Number.isFinite(netoProtocoloGuardado) ? netoProtocoloGuardado : undefined,
+          montoNetoCotizacion: netoEfectivo,
           items: Array.isArray(p.items) ? p.items : [],
           chatMessagesCount: chatStatsByProtocolo[p.id]?.count || 0,
           chatLastMessageAt: chatStatsByProtocolo[p.id]?.lastMessageAt || null,
@@ -6461,6 +6508,7 @@ const ProtocolosModule = ({
                 total: 0,
                 tipoDoc: 'Factura',
                 estado: 'Emitida',
+                docUrl: p.factura_bm_doc_url || '',
                 createdAt: ''
               }];
             }
@@ -6872,6 +6920,23 @@ const ProtocolosModule = ({
 const VistaListadoProtocolos = ({ protocolos, chatReadState = {}, onVerDetalle, onNuevoProtocolo, onEliminar, hideFinancials = false, loading = false }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterEstado, setFilterEstado] = useState('todos');
+  const [documentoModal, setDocumentoModal] = useState({
+    abierto: false,
+    titulo: '',
+    url: ''
+  });
+
+  const abrirDocumentoModal = (titulo, url) => {
+    if (!url) {
+      alert('No hay documento asociado.');
+      return;
+    }
+    setDocumentoModal({
+      abierto: true,
+      titulo,
+      url
+    });
+  };
 
   const protocolosFiltrados = protocolos.filter(p => {
     const matchSearch = p.folio.includes(searchTerm) || 
@@ -7045,6 +7110,9 @@ const VistaListadoProtocolos = ({ protocolos, chatReadState = {}, onVerDetalle, 
                 const iva = neto * 0.19;
                 const total = neto + iva;
                 const resumenFacturas = obtenerResumenFacturas(protocolo.facturas);
+                const facturaDocUrl = resumenFacturas?.ultima?.docUrl || protocolo.facturaBmDocUrl || '';
+                const facturasConNumero = (protocolo.facturas || []).filter((factura) => String(factura?.numero || '').trim());
+                const ocDocUrl = protocolo.ocClienteDocUrl || '';
                 const readCount = chatReadState?.[protocolo.id]?.readCount || 0;
                 const unreadCount = Math.max(0, (protocolo.chatMessagesCount || 0) - readCount);
                 const hasUnreadMessages = unreadCount > 0;
@@ -7073,7 +7141,17 @@ const VistaListadoProtocolos = ({ protocolos, chatReadState = {}, onVerDetalle, 
                   </td>
                   <td className="px-6 py-4">
                     {protocolo.ocCliente ? (
-                      <span className="text-gray-700 font-medium">{protocolo.ocCliente}</span>
+                      ocDocUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => abrirDocumentoModal(`OC Cliente ${protocolo.ocCliente}`, ocDocUrl)}
+                          className="text-[#235250] font-medium underline underline-offset-2 hover:text-[#45ad98] transition-colors"
+                        >
+                          {protocolo.ocCliente}
+                        </button>
+                      ) : (
+                        <span className="text-gray-700 font-medium">{protocolo.ocCliente}</span>
+                      )
                     ) : (
                       <span className="text-gray-400 text-sm">Sin OC</span>
                     )}
@@ -7092,11 +7170,35 @@ const VistaListadoProtocolos = ({ protocolos, chatReadState = {}, onVerDetalle, 
                   </td>
                   <td className="px-6 py-4">
                     {resumenFacturas ? (
-                      <div>
-                        <p className="font-medium text-green-600">{resumenFacturas.ultima?.numero || 'Sin número'}</p>
-                        <p className="text-xs text-gray-500">{resumenFacturas.ultima?.fecha || ''}</p>
-                        {resumenFacturas.count > 1 && (
-                          <p className="text-xs text-gray-400">+{resumenFacturas.count - 1} más</p>
+                      <div className="flex flex-wrap gap-1">
+                        {facturasConNumero.map((factura) => (
+                          factura.docUrl ? (
+                            <button
+                              key={factura.id}
+                              type="button"
+                              onClick={() => abrirDocumentoModal(`Factura BM ${factura.numero || ''}`.trim(), factura.docUrl)}
+                              className="font-medium text-green-600 underline underline-offset-2 hover:text-green-700 transition-colors text-xs"
+                            >
+                              {factura.numero || 'Sin número'}
+                            </button>
+                          ) : (
+                            <span key={factura.id} className="font-medium text-green-600 text-xs">
+                              {factura.numero || 'Sin número'}
+                            </span>
+                          )
+                        ))}
+                        {!facturasConNumero.length && (
+                          facturaDocUrl ? (
+                            <button
+                              type="button"
+                              onClick={() => abrirDocumentoModal(`Factura BM ${resumenFacturas.ultima?.numero || ''}`.trim(), facturaDocUrl)}
+                              className="font-medium text-green-600 underline underline-offset-2 hover:text-green-700 transition-colors text-xs"
+                            >
+                              {resumenFacturas.ultima?.numero || 'Sin número'}
+                            </button>
+                          ) : (
+                            <span className="font-medium text-green-600 text-xs">{resumenFacturas.ultima?.numero || 'Sin número'}</span>
+                          )
                         )}
                       </div>
                     ) : (
@@ -7140,6 +7242,14 @@ const VistaListadoProtocolos = ({ protocolos, chatReadState = {}, onVerDetalle, 
           </div>
         )}
       </div>
+
+      {documentoModal.abierto && (
+        <DocumentoPDFModal
+          titulo={documentoModal.titulo}
+          url={documentoModal.url}
+          onClose={() => setDocumentoModal({ abierto: false, titulo: '', url: '' })}
+        />
+      )}
     </div>
   );
 };
@@ -7513,8 +7623,16 @@ const VistaDetalleProtocolo = ({
   const [editingFechas, setEditingFechas] = useState(false);
   const [tempFechaInicio, setTempFechaInicio] = useState(protocolo.fechaInicioProduccion || '');
   const [tempFechaEntrega, setTempFechaEntrega] = useState(protocolo.fechaEntrega || '');
+  const [uploadingDocType, setUploadingDocType] = useState('');
+  const [showUploadFacturaDocModal, setShowUploadFacturaDocModal] = useState(false);
+  const [documentoModal, setDocumentoModal] = useState({
+    abierto: false,
+    titulo: '',
+    url: ''
+  });
   const itemsCompradosKey = `protocolos.itemsComprados.${protocolo.id ?? protocolo.folio ?? 'default'}`;
   const itemsCompradosHydratingRef = useRef(true);
+  const ocFileInputRef = useRef(null);
 
   const resumenFacturas = (() => {
     if (!facturasProtocolo.length) return null;
@@ -7531,6 +7649,146 @@ const VistaDetalleProtocolo = ({
   const estadosSelect = estadosBase.includes(protocolo.estado)
     ? estadosBase
     : [...estadosBase, protocolo.estado];
+  const facturasConNumero = facturasProtocolo.filter((factura) => String(factura?.numero || '').trim());
+
+  const abrirDocumentoModal = (titulo, url) => {
+    if (!url) {
+      alert('No hay documento asociado.');
+      return;
+    }
+    setDocumentoModal({
+      abierto: true,
+      titulo,
+      url
+    });
+  };
+
+  const subirDocumentoProtocolo = async (tipoDocumento, file, facturaObjetivo = null) => {
+    if (!file) return false;
+
+    const isPdfByType = String(file.type || '').toLowerCase() === 'application/pdf';
+    const isPdfByName = /\.pdf$/i.test(file.name || '');
+    if (!isPdfByType && !isPdfByName) {
+      alert('Solo se permiten archivos PDF');
+      return false;
+    }
+
+    try {
+      setUploadingDocType(tipoDocumento);
+      const publicUrl = await uploadProtocoloDocumentoPDF({
+        protocoloId: protocolo.id,
+        tipo: tipoDocumento,
+        file
+      });
+
+      if (tipoDocumento === 'factura') {
+        const isLegacyFactura = facturaObjetivo && String(facturaObjetivo.id).startsWith('legacy-');
+        if (facturaObjetivo && !isLegacyFactura) {
+          await updateProtocoloFactura(facturaObjetivo.id, { doc_url: publicUrl });
+          const facturasActualizadas = facturasProtocolo.map((factura) =>
+            factura.id === facturaObjetivo.id ? { ...factura, docUrl: publicUrl } : factura
+          );
+          onActualizar({
+            ...protocolo,
+            facturaBmDocUrl: publicUrl,
+            facturas: facturasActualizadas
+          });
+          alert(`Factura PDF asociada a ${facturaObjetivo.numero}`);
+        } else {
+          await updateProtocolo(protocolo.id, { factura_bm_doc_url: publicUrl });
+          onActualizar({ ...protocolo, facturaBmDocUrl: publicUrl });
+          alert('Factura PDF subida correctamente');
+        }
+      } else {
+        await updateProtocolo(protocolo.id, { oc_cliente_doc_url: publicUrl });
+        onActualizar({ ...protocolo, ocClienteDocUrl: publicUrl });
+        alert('OC PDF subida correctamente');
+      }
+      return true;
+    } catch (error) {
+      console.error('Error subiendo documento de protocolo:', error);
+      alert('Error al subir el documento PDF');
+      return false;
+    } finally {
+      setUploadingDocType('');
+    }
+  };
+
+  const onSubirFacturaClick = () => {
+    if (!facturasConNumero.length) {
+      alert('Primero agrega al menos una Factura BM con número para poder asociar el PDF.');
+      return;
+    }
+    setShowUploadFacturaDocModal(true);
+  };
+
+  const onConfirmUploadFacturaDoc = async ({ facturaId, file }) => {
+    const facturaObjetivo = facturasConNumero.find((factura) => String(factura.id) === String(facturaId));
+    if (!facturaObjetivo) {
+      alert('Selecciona una factura válida.');
+      return;
+    }
+    const ok = await subirDocumentoProtocolo('factura', file, facturaObjetivo);
+    if (ok) {
+      setShowUploadFacturaDocModal(false);
+    }
+  };
+
+  const onOcFileChange = async (event) => {
+    const file = event.target?.files?.[0];
+    event.target.value = '';
+    await subirDocumentoProtocolo('oc', file);
+  };
+
+  const quitarDocumentoFactura = async (factura) => {
+    const urlDocumento = factura?.docUrl || '';
+    if (!urlDocumento) {
+      alert('Esta factura no tiene PDF asociado.');
+      return;
+    }
+    if (!window.confirm('¿Quitar el PDF asociado a esta factura?')) return;
+
+    try {
+      const isLegacyFactura = String(factura.id).startsWith('legacy-');
+      let facturasActualizadas = [...facturasProtocolo];
+      let nuevoDocResumen = protocolo.facturaBmDocUrl || null;
+
+      if (isLegacyFactura) {
+        await updateProtocolo(protocolo.id, { factura_bm_doc_url: null });
+        facturasActualizadas = facturasActualizadas.map((f) =>
+          f.id === factura.id ? { ...f, docUrl: '' } : f
+        );
+        nuevoDocResumen = null;
+      } else {
+        await updateProtocoloFactura(factura.id, { doc_url: null });
+        facturasActualizadas = facturasActualizadas.map((f) =>
+          f.id === factura.id ? { ...f, docUrl: '' } : f
+        );
+        nuevoDocResumen = facturasActualizadas.find((f) => String(f.docUrl || '').trim())?.docUrl || null;
+        await updateProtocolo(protocolo.id, { factura_bm_doc_url: nuevoDocResumen });
+      }
+
+      const storagePath = getProtocoloDocStoragePathFromPublicUrl(urlDocumento);
+      if (storagePath) {
+        const { error: removeError } = await supabase.storage
+          .from(PROTOCOLO_DOCS_BUCKET)
+          .remove([storagePath]);
+        if (removeError) {
+          console.warn('No se pudo borrar archivo de storage, se quitó solo la referencia:', removeError);
+        }
+      }
+
+      onActualizar({
+        ...protocolo,
+        facturaBmDocUrl: nuevoDocResumen,
+        facturas: facturasActualizadas
+      });
+      alert('PDF de factura eliminado');
+    } catch (error) {
+      console.error('Error quitando PDF de factura:', error);
+      alert('Error al eliminar el PDF de la factura');
+    }
+  };
 
   useEffect(() => {
     try {
@@ -7608,6 +7866,7 @@ const VistaDetalleProtocolo = ({
                 total: parseFloat(actualizada.total) || 0,
                 tipoDoc: actualizada.tipo_doc || 'Factura',
                 estado: actualizada.estado || 'Emitida',
+                docUrl: actualizada.doc_url || '',
                 createdAt: actualizada.created_at || ''
               }
             : f
@@ -7625,6 +7884,7 @@ const VistaDetalleProtocolo = ({
             total: parseFloat(creada.total) || 0,
             tipoDoc: creada.tipo_doc || 'Factura',
             estado: creada.estado || 'Emitida',
+            docUrl: creada.doc_url || '',
             createdAt: creada.created_at || ''
           },
           ...facturasActualizadas
@@ -7799,26 +8059,73 @@ const VistaDetalleProtocolo = ({
                 <div>
                   <p className="text-gray-500">OC Cliente:</p>
                   <p className="font-semibold text-gray-800">
-                    {protocolo.ocCliente || <span className="text-gray-400">Sin OC</span>}
+                    {protocolo.ocCliente ? (
+                      protocolo.ocClienteDocUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => abrirDocumentoModal(`OC Cliente ${protocolo.ocCliente}`, protocolo.ocClienteDocUrl)}
+                          className="text-[#235250] underline underline-offset-2 hover:text-[#45ad98] transition-colors"
+                        >
+                          {protocolo.ocCliente}
+                        </button>
+                      ) : (
+                        protocolo.ocCliente
+                      )
+                    ) : (
+                      <span className="text-gray-400">Sin OC</span>
+                    )}
                   </p>
+                  {protocolo.ocClienteDocUrl && !protocolo.ocCliente && (
+                    <button
+                      type="button"
+                      onClick={() => abrirDocumentoModal('OC Cliente', protocolo.ocClienteDocUrl)}
+                      className="text-xs text-[#235250] underline underline-offset-2 mt-1"
+                    >
+                      Ver OC PDF
+                    </button>
+                  )}
                 </div>
                 <div>
                   <p className="text-gray-500">Facturas BM:</p>
-                  <p className="font-semibold text-gray-800">
-                    {resumenFacturas ? (
-                      <>
-                        <span className="text-green-600">{resumenFacturas.ultima?.numero || 'Sin número'}</span>
-                        {resumenFacturas.ultima?.fecha && (
-                          <span className="text-xs text-gray-500 ml-2">{resumenFacturas.ultima?.fecha}</span>
-                        )}
-                        <span className="text-xs text-gray-500 ml-2">
-                          ({resumenFacturas.count} factura{resumenFacturas.count === 1 ? '' : 's'})
+                  <div className="font-semibold text-gray-800 flex flex-wrap gap-2">
+                    {facturasConNumero.length > 0 ? (
+                      facturasConNumero.map((factura) => (
+                        <span
+                          key={factura.id}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-50 border border-gray-200 text-xs"
+                        >
+                          {factura.docUrl ? (
+                            <button
+                              type="button"
+                              onClick={() => abrirDocumentoModal(`Factura BM ${factura.numero || ''}`.trim(), factura.docUrl)}
+                              className="text-green-700 underline underline-offset-2 hover:text-green-800 transition-colors"
+                            >
+                              {factura.numero || 'Sin número'}
+                            </button>
+                          ) : (
+                            <span className="text-green-700">{factura.numero || 'Sin número'}</span>
+                          )}
+                          {factura.fecha && <span className="text-gray-500">{factura.fecha}</span>}
                         </span>
-                      </>
+                      ))
                     ) : (
                       <span className="text-gray-400">Sin facturas</span>
                     )}
-                  </p>
+                  </div>
+                  {resumenFacturas && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {resumenFacturas.count} factura{resumenFacturas.count === 1 ? '' : 's'}
+                    </p>
+                  )}
+                  {!resumenFacturas && protocolo.facturaBmDocUrl && (
+                    <button
+                      type="button"
+                      onClick={() => abrirDocumentoModal('Factura BM', protocolo.facturaBmDocUrl)}
+                      className="text-xs text-[#235250] underline underline-offset-2 mt-1"
+                    >
+                      Ver factura PDF
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -7872,6 +8179,24 @@ const VistaDetalleProtocolo = ({
               Fechas Produccion
             </button>
             <button
+              onClick={onSubirFacturaClick}
+              className="px-6 py-3 bg-white border-2 rounded-xl font-semibold hover:bg-gray-50 transition-all disabled:opacity-60"
+              style={{ borderColor: '#45ad98', color: '#235250' }}
+              disabled={uploadingDocType === 'factura'}
+            >
+              <FileText className="w-5 h-5 inline mr-2" />
+              {uploadingDocType === 'factura' ? 'Subiendo Factura...' : 'Subir Factura'}
+            </button>
+            <button
+              onClick={() => ocFileInputRef.current?.click()}
+              className="px-6 py-3 bg-white border-2 rounded-xl font-semibold hover:bg-gray-50 transition-all disabled:opacity-60"
+              style={{ borderColor: '#45ad98', color: '#235250' }}
+              disabled={uploadingDocType === 'oc'}
+            >
+              <FileText className="w-5 h-5 inline mr-2" />
+              {uploadingDocType === 'oc' ? 'Subiendo OC...' : 'Subir OC'}
+            </button>
+            <button
               onClick={async () => {
                 try {
                   await generarProtocoloPDF(protocolo, protocolo.items || [], ocVinculadas);
@@ -7886,6 +8211,13 @@ const VistaDetalleProtocolo = ({
               Generar PDF
             </button>
           </div>
+          <input
+            ref={ocFileInputRef}
+            type="file"
+            accept="application/pdf,.pdf"
+            onChange={onOcFileChange}
+            className="hidden"
+          />
 
           {/* Editor de fechas de producción */}
           {editingFechas && (
@@ -8170,7 +8502,19 @@ const VistaDetalleProtocolo = ({
                   return (
                     <tr key={factura.id}>
                       <td className="px-4 py-3 font-semibold">{factura.tipoDoc || 'Factura'}</td>
-                      <td className="px-4 py-3 text-gray-700">{factura.numero || 'Sin número'}</td>
+                      <td className="px-4 py-3 text-gray-700">
+                        {factura.docUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => abrirDocumentoModal(`Factura BM ${factura.numero || ''}`.trim(), factura.docUrl)}
+                            className="text-[#235250] underline underline-offset-2 hover:text-[#45ad98] transition-colors"
+                          >
+                            {factura.numero || 'Sin número'}
+                          </button>
+                        ) : (
+                          factura.numero || 'Sin número'
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-gray-600">{factura.fecha || 'Sin fecha'}</td>
                       {!hideFinancials && (
                         <>
@@ -8185,6 +8529,14 @@ const VistaDetalleProtocolo = ({
                         </span>
                       </td>
                       <td className="px-4 py-3 space-x-2">
+                        {factura.docUrl && (
+                          <button
+                            onClick={() => quitarDocumentoFactura(factura)}
+                            className="px-3 py-2 bg-amber-100 text-amber-800 rounded-lg text-xs font-semibold hover:bg-amber-200"
+                          >
+                            Quitar PDF
+                          </button>
+                        )}
                         <button
                           onClick={() => {
                             setFacturaEnEdicion(factura);
@@ -8213,6 +8565,23 @@ const VistaDetalleProtocolo = ({
           <div className="text-gray-500 text-sm">No hay facturas registradas.</div>
         )}
       </div>
+
+      {documentoModal.abierto && (
+        <DocumentoPDFModal
+          titulo={documentoModal.titulo}
+          url={documentoModal.url}
+          onClose={() => setDocumentoModal({ abierto: false, titulo: '', url: '' })}
+        />
+      )}
+
+      {showUploadFacturaDocModal && (
+        <UploadFacturaDocumentoModal
+          facturas={facturasConNumero}
+          isUploading={uploadingDocType === 'factura'}
+          onClose={() => setShowUploadFacturaDocModal(false)}
+          onConfirm={onConfirmUploadFacturaDoc}
+        />
+      )}
 
       {showFacturaModal && (
         <FacturaProtocoloModal
@@ -8329,6 +8698,124 @@ const ModalCerrarProtocolo = ({ protocolo, costoReal, onClose, onConfirmar }) =>
   );
 };
 
+const DocumentoPDFModal = ({ titulo, url, onClose }) => {
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[80] p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[88vh] flex flex-col overflow-hidden">
+        <div className="px-6 py-4 border-b flex items-center justify-between">
+          <h4 className="text-lg font-bold text-gray-800">{titulo || 'Documento PDF'}</h4>
+          <div className="flex items-center gap-3">
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-2 text-sm font-semibold text-[#235250] border border-[#45ad98] rounded-lg hover:bg-[#45ad98]/10 transition-colors"
+            >
+              Abrir en pestaña
+            </a>
+            <button
+              onClick={onClose}
+              className="px-3 py-2 text-sm font-semibold text-white rounded-lg"
+              style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 bg-gray-100">
+          <iframe
+            title={titulo || 'Documento PDF'}
+            src={`${url}#toolbar=1&navpanes=0&scrollbar=1`}
+            className="w-full h-full"
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const UploadFacturaDocumentoModal = ({ facturas = [], isUploading = false, onClose, onConfirm }) => {
+  const [facturaId, setFacturaId] = useState(facturas[0]?.id || '');
+  const [file, setFile] = useState(null);
+
+  useEffect(() => {
+    if (!facturas.length) {
+      setFacturaId('');
+      return;
+    }
+    if (!facturas.some((factura) => String(factura.id) === String(facturaId))) {
+      setFacturaId(facturas[0].id);
+    }
+  }, [facturas, facturaId]);
+
+  const handleConfirm = () => {
+    if (!facturaId) {
+      alert('Selecciona una factura.');
+      return;
+    }
+    if (!file) {
+      alert('Selecciona un PDF.');
+      return;
+    }
+    onConfirm({ facturaId, file });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[75] p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+        <div className="p-6 border-b">
+          <h4 className="text-xl font-bold text-gray-800">Subir PDF de Factura</h4>
+          <p className="text-sm text-gray-500 mt-1">Selecciona la factura BM a la que quieres asociar el documento.</p>
+        </div>
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Factura BM</label>
+            <select
+              value={facturaId}
+              onChange={(e) => setFacturaId(e.target.value)}
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98] bg-white"
+            >
+              {facturas.map((factura) => (
+                <option key={factura.id} value={factura.id}>
+                  {factura.numero || 'Sin número'}{factura.fecha ? ` - ${factura.fecha}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Archivo PDF</label>
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              className="w-full px-3 py-2 border-2 border-gray-200 rounded-xl"
+            />
+            {file && (
+              <p className="text-xs text-gray-500 mt-2 truncate">{file.name}</p>
+            )}
+          </div>
+        </div>
+        <div className="p-6 border-t flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border-2 border-gray-300 rounded-lg text-gray-700 font-semibold"
+            disabled={isUploading}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleConfirm}
+            className="px-4 py-2 bg-[#45ad98] text-white rounded-lg font-semibold disabled:opacity-60"
+            disabled={isUploading || !facturaId || !file}
+          >
+            {isUploading ? 'Subiendo...' : 'Subir PDF'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Modal Factura Protocolo
 const FacturaProtocoloModal = ({ onClose, onSave, factura }) => {
   const [tipoDoc, setTipoDoc] = useState(factura?.tipoDoc || 'Factura');
@@ -8337,6 +8824,21 @@ const FacturaProtocoloModal = ({ onClose, onSave, factura }) => {
     factura?.fecha || new Date().toISOString().split('T')[0]
   );
   const [estado, setEstado] = useState(factura?.estado || 'Emitida');
+  const [montoNeto, setMontoNeto] = useState(
+    factura?.montoNeto !== undefined && factura?.montoNeto !== null && Number(factura?.montoNeto) > 0
+      ? String(Math.round(Number(factura.montoNeto)))
+      : ''
+  );
+
+  const montoNetoNum = Number(montoNeto) || 0;
+  const ivaCalculado = Math.round(montoNetoNum * 0.19);
+  const totalCalculado = montoNetoNum + ivaCalculado;
+  const formatCurrency = (value) =>
+    new Intl.NumberFormat('es-CL', {
+      style: 'currency',
+      currency: 'CLP',
+      minimumFractionDigits: 0
+    }).format(Number(value) || 0);
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
@@ -8391,6 +8893,28 @@ const FacturaProtocoloModal = ({ onClose, onSave, factura }) => {
               <option value="Pagada">Pagada</option>
             </select>
           </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Monto Neto *</label>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={montoNeto}
+              onChange={(e) => setMontoNeto(e.target.value)}
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98]"
+              placeholder="Ej: 1500000"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+              <p className="text-xs text-gray-500 mb-1">IVA (19%)</p>
+              <p className="font-semibold text-gray-800">{formatCurrency(ivaCalculado)}</p>
+            </div>
+            <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+              <p className="text-xs text-gray-500 mb-1">Total</p>
+              <p className="font-semibold text-gray-800">{formatCurrency(totalCalculado)}</p>
+            </div>
+          </div>
         </div>
         <div className="p-6 border-t flex justify-end space-x-3">
           <button
@@ -8406,11 +8930,14 @@ const FacturaProtocoloModal = ({ onClose, onSave, factura }) => {
                 tipoDoc,
                 numero: numero.trim(),
                 fecha,
-                estado
+                estado,
+                montoNeto: montoNetoNum,
+                iva: ivaCalculado,
+                total: totalCalculado
               })
             }
             className="px-4 py-2 bg-[#45ad98] text-white rounded-lg font-semibold"
-            disabled={!numero || !fecha}
+            disabled={!numero || !fecha || montoNetoNum <= 0}
           >
             Guardar
           </button>
@@ -10572,6 +11099,11 @@ const [showNewModal, setShowNewModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterEstado, setFilterEstado] = useState('todas');
+  const [documentoModal, setDocumentoModal] = useState({
+    abierto: false,
+    titulo: '',
+    url: ''
+  });
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('es-CL', {
@@ -10705,8 +11237,29 @@ const [showNewModal, setShowNewModal] = useState(false);
 
   const getOCClienteDeCotizacion = (cot) => {
     if (!cot.adjudicada_a_protocolo) return null;
-    const protocolo = sharedProtocolos.find(p => p.folio === cot.adjudicada_a_protocolo);
+    const protocolo = sharedProtocolos.find(
+      (p) => String(p.folio) === String(cot.adjudicada_a_protocolo)
+    );
     return protocolo?.ocCliente || null;
+  };
+
+  const getProtocoloDeCotizacion = (cot) => {
+    if (!cot?.adjudicada_a_protocolo) return null;
+    return sharedProtocolos.find(
+      (p) => String(p.folio) === String(cot.adjudicada_a_protocolo)
+    ) || null;
+  };
+
+  const abrirDocumentoModal = (titulo, url) => {
+    if (!url) {
+      alert('No hay documento asociado.');
+      return;
+    }
+    setDocumentoModal({
+      abierto: true,
+      titulo,
+      url
+    });
   };
 
   const abrirModalGanada = (cotizacion) => {
@@ -10889,9 +11442,21 @@ const [showNewModal, setShowNewModal] = useState(false);
                   })()}
                   <td className="px-6 py-4">
                     {(() => {
+                      const protocolo = getProtocoloDeCotizacion(cot);
                       const ocCliente = getOCClienteDeCotizacion(cot);
+                      const ocDocUrl = protocolo?.ocClienteDocUrl || '';
                       return ocCliente ? (
-                        <span className="font-medium text-gray-700">{ocCliente}</span>
+                        ocDocUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => abrirDocumentoModal(`OC Cliente ${ocCliente}`, ocDocUrl)}
+                            className="font-medium text-[#235250] underline underline-offset-2 hover:text-[#45ad98] transition-colors"
+                          >
+                            {ocCliente}
+                          </button>
+                        ) : (
+                          <span className="font-medium text-gray-700">{ocCliente}</span>
+                        )
                       ) : (
                         <span className="text-gray-400 text-sm">—</span>
                       );
@@ -11005,6 +11570,14 @@ const [showNewModal, setShowNewModal] = useState(false);
           </div>
         )}
       </div>
+
+      {documentoModal.abierto && (
+        <DocumentoPDFModal
+          titulo={documentoModal.titulo}
+          url={documentoModal.url}
+          onClose={() => setDocumentoModal({ abierto: false, titulo: '', url: '' })}
+        />
+      )}
 
       {/* Modal Nueva Cotización */}
       {showNewModal && (
@@ -11147,10 +11720,12 @@ const [showNewModal, setShowNewModal] = useState(false);
                   String(p.numero_cotizacion) === String(cotizacionSeleccionada.numero)
                 );
                 if (protocoloRelacionado) {
+                  const netoActualizado = Number(updates.neto ?? updates.monto) || 0;
                   await updateProtocolo(protocoloRelacionado.id, {
                     nombre_proyecto: updates.nombre_proyecto,
                     unidad_negocio: updates.unidad_negocio,
-                    monto_total: updates.monto
+                    monto_neto: netoActualizado,
+                    monto_total: netoActualizado * 1.19
                   });
                 }
               }
@@ -12668,6 +13243,17 @@ const Dashboard = ({ user, onLogout }) => {
     });
 
     const mapProtocolo = (p, cotizacionesByNumero, cotizacionesByFolio) => ({
+      ...(() => {
+        const netoCotizacion =
+          cotizacionesByFolio.get(String(p.folio)) ??
+          cotizacionesByNumero.get(normalizarNumero(p.numero_cotizacion));
+        const netoProtocoloGuardado = parseFloat(p.monto_neto);
+        const netoEfectivo = netoCotizacion ?? (Number.isFinite(netoProtocoloGuardado) ? netoProtocoloGuardado : undefined);
+        return {
+          montoNeto: Number.isFinite(netoProtocoloGuardado) ? netoProtocoloGuardado : undefined,
+          montoNetoCotizacion: netoEfectivo
+        };
+      })(),
       id: p.id,
       folio: p.folio,
       numeroCotizacion: p.numero_cotizacion || '',
@@ -12676,18 +13262,14 @@ const Dashboard = ({ user, onLogout }) => {
       rutCliente: p.clientes?.rut || '',
       tipo: p.tipo,
       ocCliente: p.oc_cliente,
+      ocClienteDocUrl: p.oc_cliente_doc_url || null,
+      facturaBmDocUrl: p.factura_bm_doc_url || null,
       estado: p.estado,
       unidadNegocio: p.unidad_negocio,
       fechaCreacion: p.fecha_creacion,
       fechaInicioProduccion: p.fecha_inicio_produccion || null,
       fechaEntrega: p.fecha_entrega || null,
       montoTotal: parseFloat(p.monto_total) || 0,
-      montoNeto: parseFloat(p.monto_neto) || undefined,
-      montoNetoCotizacion: p.monto_neto ? parseFloat(p.monto_neto) : (
-        cotizacionesByFolio.get(String(p.folio)) ??
-        cotizacionesByNumero.get(normalizarNumero(p.numero_cotizacion)) ??
-        0
-      ),
       items: p.items || [],
       facturas: (() => {
         const facturas = facturasByProtocolo[p.id] || [];
@@ -12702,6 +13284,7 @@ const Dashboard = ({ user, onLogout }) => {
             total: 0,
             tipoDoc: 'Factura',
             estado: 'Emitida',
+            docUrl: p.factura_bm_doc_url || '',
             createdAt: ''
           }];
         }
@@ -12776,6 +13359,7 @@ const Dashboard = ({ user, onLogout }) => {
             total: parseFloat(factura.total) || 0,
             tipoDoc: factura.tipo_doc || 'Factura',
             estado: factura.estado || 'Emitida',
+            docUrl: factura.doc_url || '',
             createdAt: factura.created_at || ''
           });
           return acc;
@@ -12878,6 +13462,7 @@ const Dashboard = ({ user, onLogout }) => {
           total: parseFloat(factura.total) || 0,
           tipoDoc: factura.tipo_doc || 'Factura',
           estado: factura.estado || 'Emitida',
+          docUrl: factura.doc_url || '',
           createdAt: factura.created_at || ''
         });
         return acc;
@@ -12908,13 +13493,16 @@ const Dashboard = ({ user, onLogout }) => {
         rutCliente: p.clientes?.rut || '',
         tipo: p.tipo,
         ocCliente: p.oc_cliente,
+        ocClienteDocUrl: p.oc_cliente_doc_url || null,
+        facturaBmDocUrl: p.factura_bm_doc_url || null,
         estado: p.estado,
         unidadNegocio: p.unidad_negocio,
         fechaCreacion: p.fecha_creacion,
         fechaInicioProduccion: p.fecha_inicio_produccion || null,
         fechaEntrega: p.fecha_entrega || null,
         montoTotal: parseFloat(p.monto_total) || 0,
-        montoNeto: parseFloat(p.monto_neto) || undefined,
+        montoNeto: Number.isFinite(parseFloat(p.monto_neto)) ? parseFloat(p.monto_neto) : undefined,
+        montoNetoCotizacion: Number.isFinite(parseFloat(p.monto_neto)) ? parseFloat(p.monto_neto) : undefined,
         items: p.items || [],
         facturas: (() => {
           const facturas = facturasByProtocolo[p.id] || [];
@@ -12929,6 +13517,7 @@ const Dashboard = ({ user, onLogout }) => {
               total: 0,
               tipoDoc: 'Factura',
               estado: 'Emitida',
+              docUrl: p.factura_bm_doc_url || '',
               createdAt: ''
             }];
           }
