@@ -6969,9 +6969,11 @@ const VistaListadoProtocolos = ({ protocolos, chatReadState = {}, onVerDetalle, 
   };
 
   const protocolosFiltrados = protocolos.filter(p => {
+    const searchLower = searchTerm.toLowerCase();
     const matchSearch = p.folio.includes(searchTerm) || 
-                       p.cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       p.numeroCotizacion.includes(searchTerm);
+                       p.cliente.toLowerCase().includes(searchLower) ||
+                       p.numeroCotizacion.includes(searchTerm) ||
+                       String(p.nombreProyecto || '').toLowerCase().includes(searchLower);
     const matchEstado = filterEstado === 'todos' || p.estado === filterEstado;
     return matchSearch && matchEstado;
   });
@@ -11409,8 +11411,10 @@ const [showNewModal, setShowNewModal] = useState(false);
 
   // Filtrar cotizaciones
   const cotizacionesFiltradas = cotizaciones.filter(cot => {
+    const searchLower = searchTerm.toLowerCase();
     const matchSearch = cot.numero.includes(searchTerm) || 
-                       cot.cliente.toLowerCase().includes(searchTerm.toLowerCase());
+                       cot.cliente.toLowerCase().includes(searchLower) ||
+                       String(cot.nombreProyecto || '').toLowerCase().includes(searchLower);
     const matchEstado = filterEstado === 'todas' || cot.estado === filterEstado;
     return matchSearch && matchEstado;
   });
