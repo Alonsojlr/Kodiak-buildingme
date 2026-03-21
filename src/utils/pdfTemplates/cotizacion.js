@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { fetchOptimizedImageDataUrl } from '../pdfImage';
 
 const formatCurrency = (value) => {
   return new Intl.NumberFormat('es-CL', {
@@ -12,19 +13,13 @@ const formatCurrency = (value) => {
 const safe = (v) => (v === null || v === undefined ? '' : String(v));
 const clean = (v) => safe(v).replace(/[{}]/g, '').trim();
 
-const loadImageAsDataUrl = async (url) => {
-  const response = await fetch(url);
-  const blob = await response.blob();
-  return await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-};
-
 export const renderCotizacionPDF = async (cotizacion, cliente, items) => {
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const doc = new jsPDF({
+    unit: 'mm',
+    format: 'a4',
+    compress: true,
+    putOnlyUsedFonts: true
+  });
   const W = doc.internal.pageSize.getWidth();
   const M = 18;
 
@@ -57,8 +52,13 @@ export const renderCotizacionPDF = async (cotizacion, cliente, items) => {
   const fecha = clean(cotizacion.fecha || '');
 
   try {
-    const logoDataUrl = await loadImageAsDataUrl('/logo-building-me.png');
-    doc.addImage(logoDataUrl, 'PNG', M, 12, 56, 18);
+    const logoDataUrl = await fetchOptimizedImageDataUrl('/logo-building-me.png', {
+      maxWidth: 520,
+      maxHeight: 220,
+      quality: 0.72,
+      outputType: 'image/jpeg'
+    });
+    doc.addImage(logoDataUrl, 'JPEG', M, 12, 56, 18);
   } catch {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(26);

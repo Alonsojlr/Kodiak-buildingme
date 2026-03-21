@@ -38,7 +38,13 @@ const drawLabelValue = (doc, label, value, x, y) => {
 };
 
 export const renderProtocoloPDF = async (protocolo, items = [], ordenesCompra = [], loadImageAsDataUrl) => {
-  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
+  const doc = new jsPDF({
+    unit: 'mm',
+    format: 'a4',
+    orientation: 'landscape',
+    compress: true,
+    putOnlyUsedFonts: true
+  });
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
   const M = 18;

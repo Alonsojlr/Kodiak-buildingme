@@ -5615,10 +5615,9 @@ const NuevoProveedorModal = ({ onClose, onSave }) => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Teléfono *</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Teléfono</label>
                 <input
                   type="text"
-                  required
                   value={formData.telefono}
                   onChange={(e) => setFormData({...formData, telefono: e.target.value})}
                   className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98]"
@@ -6596,6 +6595,22 @@ const ProtocolosModule = ({
   useEffect(() => {
     refrescarOrdenesCompra();
   }, []);
+
+  useEffect(() => {
+    if (!protocoloParaAbrir) return;
+    const protocoloObjetivo = protocolos.find((protocolo) => {
+      if (protocoloParaAbrir?.id && protocolo.id === protocoloParaAbrir.id) return true;
+      if (protocoloParaAbrir?.folio && String(protocolo.folio) === String(protocoloParaAbrir.folio)) return true;
+      return false;
+    });
+    if (!protocoloObjetivo) return;
+
+    markProtocoloChatAsRead(protocoloObjetivo.id, protocoloObjetivo.chatMessagesCount || 0);
+    setProtocoloSeleccionado({ ...protocoloObjetivo, items: obtenerItemsProtocolo(protocoloObjetivo) });
+    setVistaActual('detalle');
+    onLimpiarProtocoloParaAbrir?.();
+  }, [protocoloParaAbrir, protocolos]);
+
   const handleAdjudicarCompraLocal = (protocolo) => {
     if (onAdjudicarCompra) {
       onAdjudicarCompra(protocolo);
@@ -10305,6 +10320,20 @@ const ClientesModule = () => {
                 ? Math.max(...clientesExistentes.map(c => parseInt(c.codigo) || 1000))
                 : 999;
 
+              const contactosNormalizados = (nuevoCliente.contactos || [])
+                .filter((c) => String(c?.nombre || '').trim())
+                .map((c) => ({
+                  nombre: String(c.nombre || '').trim(),
+                  cargo: String(c.cargo || '').trim() || null,
+                  email: String(c.email || '').trim() || null,
+                  telefono: String(c.telefono || '').trim() || null,
+                  es_principal: !!c.es_principal
+                }));
+              const contactoPrincipal =
+                contactosNormalizados.find((c) => c.es_principal) ||
+                contactosNormalizados[0] ||
+                null;
+
               const clienteData = {
                 codigo: `${ultimoCodigo + 1}`,
                 razon_social: nuevoCliente.razonSocial,
@@ -10314,13 +10343,30 @@ const ClientesModule = () => {
                 ciudad: nuevoCliente.ciudad,
                 comuna: nuevoCliente.comuna,
                 pais: nuevoCliente.pais,
-                email: nuevoCliente.email,
-                persona_encargada: nuevoCliente.personaEncargada,
-                telefono: nuevoCliente.telefono,
+                email: contactoPrincipal?.email || '',
+                persona_encargada: contactoPrincipal?.nombre || '',
+                telefono: contactoPrincipal?.telefono || '',
                 observaciones: nuevoCliente.observaciones || ''
               };
 
-              await createCliente(clienteData);
+              const clienteCreado = await createCliente(clienteData);
+
+              if (clienteCreado?.id && contactosNormalizados.length > 0) {
+                const contactosConPrincipal = contactosNormalizados.map((contacto, index) => ({
+                  ...contacto,
+                  es_principal: contacto.es_principal || (index === 0 && !contactosNormalizados.some(c => c.es_principal))
+                }));
+                for (const contacto of contactosConPrincipal) {
+                  await createContacto({
+                    cliente_id: clienteCreado.id,
+                    nombre: contacto.nombre,
+                    cargo: contacto.cargo,
+                    email: contacto.email,
+                    telefono: contacto.telefono,
+                    es_principal: contacto.es_principal
+                  });
+                }
+              }
               await loadClientes();
 
               setShowNewModal(false);
@@ -10393,15 +10439,71 @@ const NuevoClienteModal = ({ onClose, onSave }) => {
     ciudad: '',
     comuna: '',
     pais: 'Chile',
-    email: '',
-    personaEncargada: '',
-    telefono: '',
     observaciones: ''
   });
+  const [contactos, setContactos] = useState([]);
+  const [nuevoContacto, setNuevoContacto] = useState({ nombre: '', cargo: '', email: '', telefono: '' });
+  const [showNuevoContacto, setShowNuevoContacto] = useState(false);
+  const [editandoContacto, setEditandoContacto] = useState(null);
+
+  const handleAgregarContacto = () => {
+    if (!nuevoContacto.nombre.trim()) {
+      alert('El nombre del contacto es requerido');
+      return;
+    }
+    const contactoCreado = {
+      id: `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      nombre: nuevoContacto.nombre.trim(),
+      cargo: nuevoContacto.cargo || '',
+      email: nuevoContacto.email || '',
+      telefono: nuevoContacto.telefono || '',
+      es_principal: contactos.length === 0
+    };
+    setContactos([...contactos, contactoCreado]);
+    setNuevoContacto({ nombre: '', cargo: '', email: '', telefono: '' });
+    setShowNuevoContacto(false);
+  };
+
+  const handleEliminarContacto = (contactoId) => {
+    if (!confirm('¿Eliminar este contacto?')) return;
+    const contactosActualizados = contactos.filter((c) => c.id !== contactoId);
+    if (contactosActualizados.length > 0 && !contactosActualizados.some((c) => c.es_principal)) {
+      contactosActualizados[0] = { ...contactosActualizados[0], es_principal: true };
+    }
+    setContactos(contactosActualizados);
+  };
+
+  const handleGuardarEdicion = () => {
+    if (!editandoContacto?.nombre?.trim()) {
+      alert('El nombre del contacto es requerido');
+      return;
+    }
+    setContactos(
+      contactos.map((contacto) =>
+        contacto.id === editandoContacto.id
+          ? {
+              ...contacto,
+              nombre: editandoContacto.nombre.trim(),
+              cargo: editandoContacto.cargo || '',
+              email: editandoContacto.email || '',
+              telefono: editandoContacto.telefono || ''
+            }
+          : contacto
+      )
+    );
+    setEditandoContacto(null);
+  };
+
+  const handleMarcarPrincipal = (contactoId) => {
+    setContactos(contactos.map((c) => ({ ...c, es_principal: c.id === contactoId })));
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave(formData);
+    onSave({
+      ...formData,
+      contactos
+    });
   };
 
   return (
@@ -10501,43 +10603,161 @@ const NuevoClienteModal = ({ onClose, onSave }) => {
             </div>
           </div>
 
-          {/* Contacto */}
+          {/* Contactos */}
           <div className="mb-6">
-            <h4 className="text-lg font-semibold text-gray-800 mb-4">Contacto</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Persona Encargada *</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.personaEncargada}
-                  onChange={(e) => setFormData({...formData, personaEncargada: e.target.value})}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98]"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Teléfono *</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.telefono}
-                  onChange={(e) => setFormData({...formData, telefono: e.target.value})}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98]"
-                  placeholder="+56 9 1234 5678"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Email *</label>
-                <input
-                  type="email"
-                  required
-                  value={formData.email}
-                  onChange={(e) => setFormData({...formData, email: e.target.value})}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98]"
-                  placeholder="contacto@empresa.cl"
-                />
-              </div>
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-lg font-semibold text-gray-800">Contactos</h4>
+              <button
+                type="button"
+                onClick={() => setShowNuevoContacto(!showNuevoContacto)}
+                className="flex items-center space-x-1 px-3 py-1.5 bg-[#45ad98] text-white rounded-lg text-sm hover:bg-[#3a9482] transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Agregar Contacto</span>
+              </button>
             </div>
+
+            {showNuevoContacto && (
+              <div className="bg-gray-50 rounded-xl p-4 mb-4 border-2 border-dashed border-gray-300">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                  <input
+                    type="text"
+                    placeholder="Nombre *"
+                    value={nuevoContacto.nombre}
+                    onChange={(e) => setNuevoContacto({...nuevoContacto, nombre: e.target.value})}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#45ad98]"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Cargo"
+                    value={nuevoContacto.cargo}
+                    onChange={(e) => setNuevoContacto({...nuevoContacto, cargo: e.target.value})}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#45ad98]"
+                  />
+                  <input
+                    type="email"
+                    placeholder="Email"
+                    value={nuevoContacto.email}
+                    onChange={(e) => setNuevoContacto({...nuevoContacto, email: e.target.value})}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#45ad98]"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Teléfono"
+                    value={nuevoContacto.telefono}
+                    onChange={(e) => setNuevoContacto({...nuevoContacto, telefono: e.target.value})}
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#45ad98]"
+                  />
+                </div>
+                <div className="flex justify-end space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => { setShowNuevoContacto(false); setNuevoContacto({ nombre: '', cargo: '', email: '', telefono: '' }); }}
+                    className="px-3 py-1.5 text-gray-600 hover:bg-gray-200 rounded-lg text-sm"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleAgregarContacto}
+                    className="px-3 py-1.5 bg-[#45ad98] text-white rounded-lg text-sm hover:bg-[#3a9482]"
+                  >
+                    Guardar Contacto
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {contactos.length === 0 ? (
+              <p className="text-gray-500 text-sm">No hay contactos registrados</p>
+            ) : (
+              <div className="space-y-2">
+                {contactos.map((contacto) => (
+                  <div key={contacto.id} className="bg-white border border-gray-200 rounded-xl p-3">
+                    {editandoContacto?.id === contacto.id ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
+                        <input
+                          type="text"
+                          value={editandoContacto.nombre}
+                          onChange={(e) => setEditandoContacto({...editandoContacto, nombre: e.target.value})}
+                          className="px-2 py-1 border border-gray-300 rounded text-sm"
+                          placeholder="Nombre"
+                        />
+                        <input
+                          type="text"
+                          value={editandoContacto.cargo || ''}
+                          onChange={(e) => setEditandoContacto({...editandoContacto, cargo: e.target.value})}
+                          className="px-2 py-1 border border-gray-300 rounded text-sm"
+                          placeholder="Cargo"
+                        />
+                        <input
+                          type="email"
+                          value={editandoContacto.email || ''}
+                          onChange={(e) => setEditandoContacto({...editandoContacto, email: e.target.value})}
+                          className="px-2 py-1 border border-gray-300 rounded text-sm"
+                          placeholder="Email"
+                        />
+                        <input
+                          type="text"
+                          value={editandoContacto.telefono || ''}
+                          onChange={(e) => setEditandoContacto({...editandoContacto, telefono: e.target.value})}
+                          className="px-2 py-1 border border-gray-300 rounded text-sm"
+                          placeholder="Teléfono"
+                        />
+                        <div className="md:col-span-2 flex justify-end space-x-2">
+                          <button type="button" onClick={() => setEditandoContacto(null)} className="px-2 py-1 text-gray-600 text-sm">Cancelar</button>
+                          <button type="button" onClick={handleGuardarEdicion} className="px-2 py-1 bg-[#45ad98] text-white rounded text-sm">Guardar</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-semibold text-gray-800">{contacto.nombre}</span>
+                            {contacto.es_principal && (
+                              <span className="px-2 py-0.5 bg-[#45ad98] text-white text-xs rounded-full">Principal</span>
+                            )}
+                            {contacto.cargo && <span className="text-gray-500 text-sm">• {contacto.cargo}</span>}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            {contacto.email && <span className="mr-3">{contacto.email}</span>}
+                            {contacto.telefono && <span>{contacto.telefono}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          {!contacto.es_principal && (
+                            <button
+                              type="button"
+                              onClick={() => handleMarcarPrincipal(contacto.id)}
+                              className="p-1.5 text-gray-400 hover:text-[#45ad98] hover:bg-gray-100 rounded"
+                              title="Marcar como principal"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setEditandoContacto(contacto)}
+                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-gray-100 rounded"
+                            title="Editar"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleEliminarContacto(contacto.id)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-gray-100 rounded"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Observaciones */}
@@ -13406,7 +13626,13 @@ const Dashboard = ({ user, onLogout }) => {
 
       // Verificar si la cotización ya tiene protocolo
       if (cotizacion.adjudicada_a_protocolo) {
-        alert(`Esta cotización ya tiene un protocolo asignado: ${cotizacion.adjudicada_a_protocolo}`);
+        const folioExistente = String(cotizacion.adjudicada_a_protocolo);
+        const protocoloExistente =
+          sharedProtocolos.find((p) => String(p.folio) === folioExistente) ||
+          { folio: folioExistente };
+        setProtocoloParaAbrir(protocoloExistente);
+        setActiveModule('protocolos');
+        alert(`Abriendo protocolo ${folioExistente}`);
         return;
       }
 

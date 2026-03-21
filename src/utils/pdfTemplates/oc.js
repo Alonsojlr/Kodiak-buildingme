@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { fetchOptimizedImageDataUrl } from "../pdfImage";
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat("es-CL", {
@@ -17,22 +18,16 @@ const hexToRgb = (hex) => {
   return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
 };
 
-async function fetchImageAsDataURL(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`No se pudo cargar imagen: ${url}`);
-  const blob = await res.blob();
-  return await new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.readAsDataURL(blob);
-  });
-}
-
 /**
  * OC A4 - 1 página - look idéntico a tu plantilla
  */
 export const renderOCPDF = async (ordenCompra, proveedor, protocolo, items) => {
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const doc = new jsPDF({
+    unit: "mm",
+    format: "a4",
+    compress: true,
+    putOnlyUsedFonts: true
+  });
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
   const M = 18;
@@ -58,8 +53,13 @@ export const renderOCPDF = async (ordenCompra, proveedor, protocolo, items) => {
   // Logo + datos empresa (izq)
   // =========================
   try {
-    const logoDataUrl = await fetchImageAsDataURL("/logo-building-me.png");
-    doc.addImage(logoDataUrl, "PNG", M, 12, 56, 18);
+    const logoDataUrl = await fetchOptimizedImageDataUrl("/logo-building-me.png", {
+      maxWidth: 520,
+      maxHeight: 220,
+      quality: 0.72,
+      outputType: "image/jpeg"
+    });
+    doc.addImage(logoDataUrl, "JPEG", M, 12, 56, 18);
   } catch {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(26);

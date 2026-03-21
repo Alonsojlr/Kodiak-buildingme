@@ -1,16 +1,26 @@
 import { renderOCPDF } from './pdfTemplates/oc';
 import { renderCotizacionPDF } from './pdfTemplates/cotizacion';
 import { renderProtocoloPDF } from './pdfTemplates/protocolo';
+import { fetchOptimizedImageDataUrl } from './pdfImage';
 
 const loadImageAsDataUrl = async (url) => {
-  const response = await fetch(url);
-  const blob = await response.blob();
-  return await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
+  try {
+    return await fetchOptimizedImageDataUrl(url, {
+      maxWidth: 520,
+      maxHeight: 220,
+      quality: 0.72,
+      outputType: 'image/jpeg'
+    });
+  } catch {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
 };
 
 
