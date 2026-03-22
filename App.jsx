@@ -6155,6 +6155,7 @@ const ProtocolosModule = ({
   const protocoloSeleccionadoRef = useRef(null);
 
   const userEmail = String(user?.email || '').toLowerCase();
+  const canEditDeleteProtocolos = user?.role !== 'comercial';
   const hideFinancials =
     user?.role === 'compras' &&
     (userEmail.includes('eyzaguirre') || userEmail.includes('jeyzaguirre') || userEmail.includes('jyzaguirre'));
@@ -6673,6 +6674,7 @@ const ProtocolosModule = ({
               prev.map(p => (p.id === protocoloActualizado.id ? protocoloActualizado : p))
             );
           }}
+          canEdit={canEditDeleteProtocolos}
         />
         {showDetalleOC && ordenDetalle && (
           <DetalleOCModal
@@ -6837,6 +6839,7 @@ const ProtocolosModule = ({
             chatReadState={chatReadState}
             hideFinancials={hideFinancials}
             loading={loading}
+            canDelete={canEditDeleteProtocolos}
             onVerDetalle={(protocolo) => {
               markProtocoloChatAsRead(protocolo.id, protocolo.chatMessagesCount || 0);
               setProtocoloSeleccionado({ ...protocolo, items: obtenerItemsProtocolo(protocolo) });
@@ -6844,6 +6847,10 @@ const ProtocolosModule = ({
             }} 
             onNuevoProtocolo={() => setShowNewModal(true)}
             onEliminar={async (protocolo) => {
+              if (!canEditDeleteProtocolos) {
+                alert('El rol Comercial no puede eliminar protocolos.');
+                return;
+              }
               if (!window.confirm(`¿Estás seguro de eliminar el protocolo ${protocolo.folio}?`)) return;
               try {
                 await deleteProtocolo(protocolo.id);
@@ -6947,7 +6954,7 @@ const ProtocolosModule = ({
 // ========================================
 // VISTA LISTADO DE PROTOCOLOS
 // ========================================
-const VistaListadoProtocolos = ({ protocolos, chatReadState = {}, onVerDetalle, onNuevoProtocolo, onEliminar, hideFinancials = false, loading = false }) => {
+const VistaListadoProtocolos = ({ protocolos, chatReadState = {}, onVerDetalle, onNuevoProtocolo, onEliminar, hideFinancials = false, loading = false, canDelete = true }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterEstado, setFilterEstado] = useState('todos');
   const [documentoModal, setDocumentoModal] = useState({
@@ -7209,12 +7216,12 @@ const VistaListadoProtocolos = ({ protocolos, chatReadState = {}, onVerDetalle, 
                               key={factura.id}
                               type="button"
                               onClick={() => abrirDocumentoModal(`Factura BM ${factura.numero || ''}`.trim(), factura.docUrl)}
-                              className="font-medium text-green-600 underline underline-offset-2 hover:text-green-700 transition-colors text-xs"
+                              className="font-medium text-green-600 underline underline-offset-2 hover:text-green-700 transition-colors"
                             >
                               {factura.numero || 'Sin número'}
                             </button>
                           ) : (
-                            <span key={factura.id} className="font-medium text-green-600 text-xs">
+                            <span key={factura.id} className="font-medium text-green-600">
                               {factura.numero || 'Sin número'}
                             </span>
                           )
@@ -7224,12 +7231,12 @@ const VistaListadoProtocolos = ({ protocolos, chatReadState = {}, onVerDetalle, 
                             <button
                               type="button"
                               onClick={() => abrirDocumentoModal(`Factura BM ${resumenFacturas.ultima?.numero || ''}`.trim(), facturaDocUrl)}
-                              className="font-medium text-green-600 underline underline-offset-2 hover:text-green-700 transition-colors text-xs"
+                              className="font-medium text-green-600 underline underline-offset-2 hover:text-green-700 transition-colors"
                             >
                               {resumenFacturas.ultima?.numero || 'Sin número'}
                             </button>
                           ) : (
-                            <span className="font-medium text-green-600 text-xs">{resumenFacturas.ultima?.numero || 'Sin número'}</span>
+                            <span className="font-medium text-green-600">{resumenFacturas.ultima?.numero || 'Sin número'}</span>
                           )
                         )}
                       </div>
@@ -7246,20 +7253,23 @@ const VistaListadoProtocolos = ({ protocolos, chatReadState = {}, onVerDetalle, 
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <button
-                      onClick={() => onVerDetalle(protocolo)}
-                      className="px-4 py-2 bg-[#45ad98] text-white rounded-lg hover:bg-[#235250] transition-colors font-semibold"
-                    >
-                      Abrir Tablero
-                    </button>
-                    {/* Eliminar Protocolo */}
-                    <button
-                      onClick={() => onEliminar?.(protocolo)}
-                      className="p-3 bg-red-100 hover:bg-red-200 rounded-lg transition-colors ml-5"
-                      title="Eliminar Protocolo"
-                    >
-                      <XCircle className="w-4 h-4 text-red-600" />
-                    </button>
+                    <div className="flex items-center gap-3 whitespace-nowrap">
+                      <button
+                        onClick={() => onVerDetalle(protocolo)}
+                        className="px-4 py-2 bg-[#45ad98] text-white rounded-lg hover:bg-[#235250] transition-colors font-semibold"
+                      >
+                        Abrir Tablero
+                      </button>
+                      {canDelete && (
+                        <button
+                          onClick={() => onEliminar?.(protocolo)}
+                          className="p-3 bg-red-100 hover:bg-red-200 rounded-lg transition-colors"
+                          title="Eliminar Protocolo"
+                        >
+                          <XCircle className="w-4 h-4 text-red-600" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
                 );
@@ -7600,8 +7610,18 @@ const VistaDetalleProtocolo = ({
   onVerDetalleOC,
   currentUserName,
   currentUser,
-  hideFinancials = false
+  hideFinancials = false,
+  canEdit = true
 }) => {
+  const canEditProtocolo = !!canEdit;
+  const bloquearEdicionComercial = () => {
+    if (!canEditProtocolo) {
+      alert('El rol Comercial no puede editar protocolos.');
+      return true;
+    }
+    return false;
+  };
+
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('es-CL', {
       style: 'currency',
@@ -7696,6 +7716,7 @@ const VistaDetalleProtocolo = ({
   };
 
   const subirDocumentoProtocolo = async (tipoDocumento, file, facturaObjetivo = null) => {
+    if (bloquearEdicionComercial()) return false;
     if (!file) return false;
 
     const isPdfByType = String(file.type || '').toLowerCase() === 'application/pdf';
@@ -7747,6 +7768,7 @@ const VistaDetalleProtocolo = ({
   };
 
   const onSubirFacturaClick = () => {
+    if (bloquearEdicionComercial()) return;
     if (!facturasConNumero.length) {
       alert('Primero agrega al menos una Factura BM con número para poder asociar el PDF.');
       return;
@@ -7755,6 +7777,7 @@ const VistaDetalleProtocolo = ({
   };
 
   const onConfirmUploadFacturaDoc = async ({ facturaId, file }) => {
+    if (bloquearEdicionComercial()) return;
     const facturaObjetivo = facturasConNumero.find((factura) => String(factura.id) === String(facturaId));
     if (!facturaObjetivo) {
       alert('Selecciona una factura válida.');
@@ -7767,12 +7790,14 @@ const VistaDetalleProtocolo = ({
   };
 
   const onOcFileChange = async (event) => {
+    if (bloquearEdicionComercial()) return;
     const file = event.target?.files?.[0];
     event.target.value = '';
     await subirDocumentoProtocolo('oc', file);
   };
 
   const quitarDocumentoFactura = async (factura) => {
+    if (bloquearEdicionComercial()) return;
     const urlDocumento = factura?.docUrl || '';
     if (!urlDocumento) {
       alert('Esta factura no tiene PDF asociado.');
@@ -7849,6 +7874,7 @@ const VistaDetalleProtocolo = ({
   }, [itemsComprados, itemsCompradosKey]);
 
   const cambiarEstado = async (nuevoEstado) => {
+    if (bloquearEdicionComercial()) return;
     if (nuevoEstado === 'Cerrado') {
       setShowCerrarModal(true);
       return;
@@ -7863,6 +7889,7 @@ const VistaDetalleProtocolo = ({
   };
 
   const guardarFacturaProtocolo = async (facturaData) => {
+    if (bloquearEdicionComercial()) return;
     const neto = Number(facturaData.montoNeto) || 0;
     const iva = facturaData.iva !== '' && facturaData.iva !== null
       ? Number(facturaData.iva) || 0
@@ -7932,6 +7959,7 @@ const VistaDetalleProtocolo = ({
   };
 
   const eliminarFacturaProtocolo = async (factura) => {
+    if (bloquearEdicionComercial()) return;
     if (String(factura.id).startsWith('legacy-')) {
       alert('Esta factura viene del histórico. Migra los datos para poder eliminarla.');
       return;
@@ -7948,6 +7976,7 @@ const VistaDetalleProtocolo = ({
   };
 
   const guardarItemProtocolo = async (item) => {
+    if (bloquearEdicionComercial()) return;
     const baseItems = Array.isArray(protocolo.items) ? protocolo.items : [];
     const nuevoItem = {
       id: Date.now(),
@@ -7968,6 +7997,7 @@ const VistaDetalleProtocolo = ({
   };
 
   const editarItemProtocolo = async (itemActualizado, itemIndex) => {
+    if (bloquearEdicionComercial()) return;
     const baseItems = Array.isArray(protocolo.items) ? protocolo.items : [];
     const itemsActualizados = baseItems.map((item, index) => {
       if (itemActualizado.id != null) {
@@ -7986,6 +8016,7 @@ const VistaDetalleProtocolo = ({
   };
 
   const eliminarItemProtocolo = async (itemId, itemIndex) => {
+    if (bloquearEdicionComercial()) return;
     if (!window.confirm('¿Eliminar este item del protocolo?')) return;
     const baseItems = Array.isArray(protocolo.items) ? protocolo.items : [];
     const itemsActualizados = baseItems.filter((item, index) => {
@@ -8045,6 +8076,7 @@ const VistaDetalleProtocolo = ({
                     value={protocolo.estado}
                     onChange={(e) => cambiarEstado(e.target.value)}
                     className="px-4 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#45ad98] bg-white font-semibold"
+                    disabled={!canEditProtocolo}
                   >
                     {estadosSelect.map((estado) => (
                       <option key={estado} value={estado}>
@@ -8124,7 +8156,7 @@ const VistaDetalleProtocolo = ({
                       facturasConNumero.map((factura) => (
                         <span
                           key={factura.id}
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-50 border border-gray-200 text-xs"
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-50 border border-gray-200"
                         >
                           {factura.docUrl ? (
                             <button
@@ -8173,61 +8205,71 @@ const VistaDetalleProtocolo = ({
               <ShoppingCart className="w-5 h-5 inline mr-2" />
               Adjudicar Compra (Crear OC)
             </button>
-            <button
-              onClick={() => {
-                setFacturaEnEdicion(null);
-                setShowFacturaModal(true);
-              }}
-              className="px-6 py-3 bg-white border-2 rounded-xl font-semibold hover:bg-gray-50 transition-all"
-              style={{ borderColor: '#45ad98', color: '#235250' }}
-            >
-              <FileText className="w-5 h-5 inline mr-2" />
-              Agregar Factura
-            </button>
-            <button
-              onClick={async () => {
-                const ocCliente = prompt('Ingrese el número de OC del cliente:');
-                if (ocCliente) {
-                  try {
-                    await updateProtocolo(protocolo.id, { oc_cliente: ocCliente });
-                    onActualizar({ ...protocolo, ocCliente });
-                  } catch (error) {
-                    console.error('Error actualizando OC cliente:', error);
-                    alert('Error al guardar la OC del cliente');
+            {canEditProtocolo && (
+              <button
+                onClick={() => {
+                  setFacturaEnEdicion(null);
+                  setShowFacturaModal(true);
+                }}
+                className="px-6 py-3 bg-white border-2 rounded-xl font-semibold hover:bg-gray-50 transition-all"
+                style={{ borderColor: '#45ad98', color: '#235250' }}
+              >
+                <FileText className="w-5 h-5 inline mr-2" />
+                Agregar Factura
+              </button>
+            )}
+            {canEditProtocolo && (
+              <button
+                onClick={async () => {
+                  const ocCliente = prompt('Ingrese el número de OC del cliente:');
+                  if (ocCliente) {
+                    try {
+                      await updateProtocolo(protocolo.id, { oc_cliente: ocCliente });
+                      onActualizar({ ...protocolo, ocCliente });
+                    } catch (error) {
+                      console.error('Error actualizando OC cliente:', error);
+                      alert('Error al guardar la OC del cliente');
+                    }
                   }
-                }
-              }}
-              className="px-6 py-3 bg-white border-2 rounded-xl font-semibold hover:bg-gray-50 transition-all"
-              style={{ borderColor: '#45ad98', color: '#235250' }}
-            >
-              📄 Ingresar OC Cliente
-            </button>
-            <button
-              onClick={() => setEditingFechas(!editingFechas)}
-              className="px-6 py-3 bg-white border-2 rounded-xl font-semibold hover:bg-gray-50 transition-all"
-              style={{ borderColor: '#45ad98', color: '#235250' }}
-            >
-              <Calendar className="w-5 h-5 inline mr-2" />
-              Fechas Produccion
-            </button>
-            <button
-              onClick={onSubirFacturaClick}
-              className="px-6 py-3 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-60"
-              style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
-              disabled={uploadingDocType === 'factura'}
-            >
-              <FileText className="w-5 h-5 inline mr-2" />
-              {uploadingDocType === 'factura' ? 'Subiendo Factura...' : 'Subir Factura'}
-            </button>
-            <button
-              onClick={() => ocFileInputRef.current?.click()}
-              className="px-6 py-3 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-60"
-              style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
-              disabled={uploadingDocType === 'oc'}
-            >
-              <FileText className="w-5 h-5 inline mr-2" />
-              {uploadingDocType === 'oc' ? 'Subiendo OC...' : 'Subir OC'}
-            </button>
+                }}
+                className="px-6 py-3 bg-white border-2 rounded-xl font-semibold hover:bg-gray-50 transition-all"
+                style={{ borderColor: '#45ad98', color: '#235250' }}
+              >
+                📄 Ingresar OC Cliente
+              </button>
+            )}
+            {canEditProtocolo && (
+              <button
+                onClick={() => setEditingFechas(!editingFechas)}
+                className="px-6 py-3 bg-white border-2 rounded-xl font-semibold hover:bg-gray-50 transition-all"
+                style={{ borderColor: '#45ad98', color: '#235250' }}
+              >
+                <Calendar className="w-5 h-5 inline mr-2" />
+                Fechas Produccion
+              </button>
+            )}
+            {canEditProtocolo && (
+              <button
+                onClick={onSubirFacturaClick}
+                className="px-6 py-3 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-60"
+                style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
+                disabled={uploadingDocType === 'factura'}
+              >
+                <FileText className="w-5 h-5 inline mr-2" />
+                {uploadingDocType === 'factura' ? 'Subiendo Factura...' : 'Subir Factura'}
+              </button>
+            )}
+            {canEditProtocolo && (
+              <button
+                onClick={() => ocFileInputRef.current?.click()}
+                className="px-6 py-3 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-60"
+                style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
+                disabled={uploadingDocType === 'oc'}
+              >
+                <FileText className="w-5 h-5 inline mr-2" />
+                {uploadingDocType === 'oc' ? 'Subiendo OC...' : 'Subir OC'}
+              </button>
+            )}
             <button
               onClick={async () => {
                 try {
@@ -8252,7 +8294,7 @@ const VistaDetalleProtocolo = ({
           />
 
           {/* Editor de fechas de producción */}
-          {editingFechas && (
+          {canEditProtocolo && editingFechas && (
             <div className="mt-4 p-4 bg-gray-50 rounded-xl border-2 border-[#45ad98]/30">
               <div className="flex items-end space-x-4">
                 <div>
@@ -8317,12 +8359,14 @@ const VistaDetalleProtocolo = ({
       <div className="bg-white rounded-2xl p-6 shadow-lg mb-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xl font-bold text-gray-800">Items del Proyecto</h3>
-          <button
-            onClick={() => setShowAddItemModal(true)}
-            className="px-4 py-2 bg-[#45ad98] text-white rounded-lg font-semibold hover:bg-[#235250] transition-colors"
-          >
-            Agregar Item
-          </button>
+          {canEditProtocolo && (
+            <button
+              onClick={() => setShowAddItemModal(true)}
+              className="px-4 py-2 bg-[#45ad98] text-white rounded-lg font-semibold hover:bg-[#235250] transition-colors"
+            >
+              Agregar Item
+            </button>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -8348,34 +8392,39 @@ const VistaDetalleProtocolo = ({
                         {item.descripcion}
                       </td>
                     <td className="px-4 py-3">
-                      <input
-                        type="checkbox"
-                        checked={!!itemsComprados[itemKey]}
-                        onChange={() =>
-                          setItemsComprados(prev => ({
-                            ...prev,
-                            [itemKey]: !prev[itemKey]
-                          }))
-                        }
-                        className="h-4 w-4"
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setItemEnEdicion({ item, index })}
-                          className="px-3 py-1 bg-blue-600 text-white rounded-lg text-xs font-semibold"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => eliminarItemProtocolo(item.id, index)}
-                          className="px-3 py-1 bg-red-600 text-white rounded-lg text-xs font-semibold"
-                        >
-                          Eliminar
-                        </button>
-                      </div>
-                    </td>
+	                      <input
+	                        type="checkbox"
+	                        checked={!!itemsComprados[itemKey]}
+	                        onChange={() =>
+	                          setItemsComprados(prev => ({
+	                            ...prev,
+	                            [itemKey]: !prev[itemKey]
+	                          }))
+	                        }
+	                        className="h-4 w-4"
+	                        disabled={!canEditProtocolo}
+	                      />
+	                    </td>
+	                    <td className="px-4 py-3">
+	                      {canEditProtocolo ? (
+	                        <div className="flex gap-2">
+	                          <button
+	                            onClick={() => setItemEnEdicion({ item, index })}
+	                            className="px-3 py-1 bg-blue-600 text-white rounded-lg text-xs font-semibold"
+	                          >
+	                            Editar
+	                          </button>
+	                          <button
+	                            onClick={() => eliminarItemProtocolo(item.id, index)}
+	                            className="px-3 py-1 bg-red-600 text-white rounded-lg text-xs font-semibold"
+	                          >
+	                            Eliminar
+	                          </button>
+	                        </div>
+	                      ) : (
+	                        <span className="text-xs text-gray-400">Solo lectura</span>
+	                      )}
+	                    </td>
                   </tr>
                   );
                 })}
@@ -8473,20 +8522,22 @@ const VistaDetalleProtocolo = ({
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => onVerDetalleOC && onVerDetalleOC(oc, false)}
-                          className="px-3 py-1 bg-[#45ad98] text-white rounded-lg hover:bg-[#235250] transition-colors text-xs font-semibold"
-                        >
-                          Ver
-                        </button>
-                        <button
-                          onClick={() => onVerDetalleOC && onVerDetalleOC(oc, true)}
-                          className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-semibold"
-                        >
-                          Editar
-                        </button>
-                      </div>
-                    </td>
+	                        <button
+	                          onClick={() => onVerDetalleOC && onVerDetalleOC(oc, false)}
+	                          className="px-3 py-1 bg-[#45ad98] text-white rounded-lg hover:bg-[#235250] transition-colors text-xs font-semibold"
+	                        >
+	                          Ver
+	                        </button>
+	                        {canEditProtocolo && (
+	                          <button
+	                            onClick={() => onVerDetalleOC && onVerDetalleOC(oc, true)}
+	                            className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs font-semibold"
+	                          >
+	                            Editar
+	                          </button>
+	                        )}
+	                      </div>
+	                    </td>
                   </tr>
                   );
                 })}
@@ -8560,33 +8611,39 @@ const VistaDetalleProtocolo = ({
                           {factura.estado || 'Emitida'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 space-x-2">
-                        {factura.docUrl && (
-                          <button
-                            onClick={() => quitarDocumentoFactura(factura)}
-                            className="px-3 py-2 bg-amber-100 text-amber-800 rounded-lg text-xs font-semibold hover:bg-amber-200"
-                          >
-                            Quitar PDF
-                          </button>
-                        )}
-                        <button
-                          onClick={() => {
-                            setFacturaEnEdicion(factura);
-                            setShowFacturaModal(true);
-                          }}
-                          className="px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
-                          disabled={isLegacy}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          onClick={() => eliminarFacturaProtocolo(factura)}
-                          className="px-3 py-2 bg-red-600 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
-                          disabled={isLegacy}
-                        >
-                          Eliminar
-                        </button>
-                      </td>
+	                      <td className="px-4 py-3 space-x-2">
+	                        {canEditProtocolo ? (
+	                          <>
+	                            {factura.docUrl && (
+	                              <button
+	                                onClick={() => quitarDocumentoFactura(factura)}
+	                                className="px-3 py-2 bg-amber-100 text-amber-800 rounded-lg text-xs font-semibold hover:bg-amber-200"
+	                              >
+	                                Quitar PDF
+	                              </button>
+	                            )}
+	                            <button
+	                              onClick={() => {
+	                                setFacturaEnEdicion(factura);
+	                                setShowFacturaModal(true);
+	                              }}
+	                              className="px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
+	                              disabled={isLegacy}
+	                            >
+	                              Editar
+	                            </button>
+	                            <button
+	                              onClick={() => eliminarFacturaProtocolo(factura)}
+	                              className="px-3 py-2 bg-red-600 text-white rounded-lg text-xs font-semibold disabled:opacity-50"
+	                              disabled={isLegacy}
+	                            >
+	                              Eliminar
+	                            </button>
+	                          </>
+	                        ) : (
+	                          <span className="text-xs text-gray-400">Solo lectura</span>
+	                        )}
+	                      </td>
                     </tr>
                   );
                 })}
@@ -8606,8 +8663,8 @@ const VistaDetalleProtocolo = ({
         />
       )}
 
-      {showUploadFacturaDocModal && (
-        <UploadFacturaDocumentoModal
+	      {canEditProtocolo && showUploadFacturaDocModal && (
+	        <UploadFacturaDocumentoModal
           facturas={facturasConNumero}
           isUploading={uploadingDocType === 'factura'}
           onClose={() => setShowUploadFacturaDocModal(false)}
@@ -8615,8 +8672,8 @@ const VistaDetalleProtocolo = ({
         />
       )}
 
-      {showFacturaModal && (
-        <FacturaProtocoloModal
+	      {canEditProtocolo && showFacturaModal && (
+	        <FacturaProtocoloModal
           factura={facturaEnEdicion}
           onClose={() => {
             setShowFacturaModal(false);
@@ -8626,16 +8683,16 @@ const VistaDetalleProtocolo = ({
         />
       )}
 
-      {showAddItemModal && (
-        <AddItemModal
+	      {canEditProtocolo && showAddItemModal && (
+	        <AddItemModal
           onClose={() => setShowAddItemModal(false)}
           onSave={guardarItemProtocolo}
           showProveedorFields={false}
         />
       )}
 
-      {itemEnEdicion && (
-        <AddItemModal
+	      {canEditProtocolo && itemEnEdicion && (
+	        <AddItemModal
           onClose={() => setItemEnEdicion(null)}
           onSave={(item) => {
             editarItemProtocolo({
@@ -8657,8 +8714,8 @@ const VistaDetalleProtocolo = ({
       )}
 
       {/* Modal Cerrar Protocolo */}
-	      {showCerrarModal && (
-	        <ModalCerrarProtocolo
+		      {canEditProtocolo && showCerrarModal && (
+		        <ModalCerrarProtocolo
 	          protocolo={protocolo}
 	          costoReal={costoRealNeto}
           onClose={() => setShowCerrarModal(false)}
@@ -11324,7 +11381,7 @@ const HistorialClienteModal = ({ cliente, onClose }) => {
 };
 
 // Componente de Módulo de Cotizaciones
-const CotizacionesModule = ({ onAdjudicarVenta, setSharedCotizaciones = () => {}, sharedProtocolos = [], currentUserName }) => {
+const CotizacionesModule = ({ onAdjudicarVenta, setSharedCotizaciones = () => {}, sharedProtocolos = [], currentUserName, user }) => {
 const [showNewModal, setShowNewModal] = useState(false);
   const [showDetalleModal, setShowDetalleModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -11341,6 +11398,7 @@ const [showNewModal, setShowNewModal] = useState(false);
     titulo: '',
     url: ''
   });
+  const canEditDeleteCotizaciones = user?.role !== 'comercial';
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('es-CL', {
@@ -11757,17 +11815,18 @@ const [showNewModal, setShowNewModal] = useState(false);
                       >
                         <FileText className="w-4 h-4 text-gray-600" />
                       </button>
-                      {/* Editar */}
-                      <button
-                        onClick={() => {
-                          setCotizacionSeleccionada(cot);
-                          setShowEditModal(true);
-                        }}
-                        className="p-2 bg-orange-100 hover:bg-orange-200 rounded-lg transition-colors"
-                        title="Editar Cotización"
-                      >
-                        <Settings className="w-4 h-4 text-orange-600" />
-                      </button>
+                      {canEditDeleteCotizaciones && (
+                        <button
+                          onClick={() => {
+                            setCotizacionSeleccionada(cot);
+                            setShowEditModal(true);
+                          }}
+                          className="p-2 bg-orange-100 hover:bg-orange-200 rounded-lg transition-colors"
+                          title="Editar Cotización"
+                        >
+                          <Settings className="w-4 h-4 text-orange-600" />
+                        </button>
+                      )}
                       {/* Descargar PDF */}
                       <button
                         onClick={() => generarPDFCotizacion(cot)}
@@ -11776,25 +11835,26 @@ const [showNewModal, setShowNewModal] = useState(false);
                       >
                         <Download className="w-4 h-4 text-blue-600" />
                       </button>
-                      {/* Eliminar */}
-                      <button
-                        onClick={async () => {
-                          if (window.confirm('¿Estás seguro de eliminar esta cotización?')) {
-                            try {
-                              await deleteCotizacion(cot.id);
-                              await loadCotizaciones();
-                              alert('Cotización eliminada');
-                            } catch (error) {
-                              console.error('Error:', error);
-                              alert('Error al eliminar');
+                      {canEditDeleteCotizaciones && (
+                        <button
+                          onClick={async () => {
+                            if (window.confirm('¿Estás seguro de eliminar esta cotización?')) {
+                              try {
+                                await deleteCotizacion(cot.id);
+                                await loadCotizaciones();
+                                alert('Cotización eliminada');
+                              } catch (error) {
+                                console.error('Error:', error);
+                                alert('Error al eliminar');
+                              }
                             }
-                          }
-                        }}
-                        className="p-2 bg-red-100 hover:bg-red-200 rounded-lg transition-colors"
-                        title="Eliminar Cotización"
-                      >
-                        <XCircle className="w-4 h-4 text-red-600" />
-                      </button>
+                          }}
+                          className="p-2 bg-red-100 hover:bg-red-200 rounded-lg transition-colors"
+                          title="Eliminar Cotización"
+                        >
+                          <XCircle className="w-4 h-4 text-red-600" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -11942,7 +12002,7 @@ const [showNewModal, setShowNewModal] = useState(false);
       )}
       
       {/* Modal Editar */}
-      {showEditModal && cotizacionSeleccionada && (
+      {showEditModal && cotizacionSeleccionada && canEditDeleteCotizaciones && (
         <EditarCotizacionModal
           cotizacion={cotizacionSeleccionada}
           onClose={() => {
@@ -11950,6 +12010,10 @@ const [showNewModal, setShowNewModal] = useState(false);
             setCotizacionSeleccionada(null);
           }}
           onSave={async (updates) => {
+            if (!canEditDeleteCotizaciones) {
+              alert('El rol Comercial no puede editar cotizaciones.');
+              return;
+            }
             try {
               await updateCotizacion(cotizacionSeleccionada.id, updates);
               if (cotizacionSeleccionada.adjudicada_a_protocolo) {
@@ -14174,6 +14238,7 @@ const Dashboard = ({ user, onLogout }) => {
               sharedProtocolos={sharedProtocolos}
               onAdjudicarVenta={handleAdjudicarVentaDesdeCotizacion}
               currentUserName={user?.name}
+              user={user}
             />
           )}
 
