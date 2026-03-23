@@ -6156,6 +6156,9 @@ const ProtocolosModule = ({
 
   const userEmail = String(user?.email || '').toLowerCase();
   const canEditDeleteProtocolos = user?.role !== 'comercial';
+  const canManageProtocoloCore = ['admin', 'comercial', 'compras'].includes(
+    String(user?.role || '').toLowerCase()
+  );
   const hideFinancials =
     user?.role === 'compras' &&
     (userEmail.includes('eyzaguirre') || userEmail.includes('jeyzaguirre') || userEmail.includes('jyzaguirre'));
@@ -6675,6 +6678,7 @@ const ProtocolosModule = ({
             );
           }}
           canEdit={canEditDeleteProtocolos}
+          canManageCore={canManageProtocoloCore}
         />
         {showDetalleOC && ordenDetalle && (
           <DetalleOCModal
@@ -7611,15 +7615,24 @@ const VistaDetalleProtocolo = ({
   currentUserName,
   currentUser,
   hideFinancials = false,
-  canEdit = true
+  canEdit = true,
+  canManageCore = false
 }) => {
   const canEditProtocolo = !!canEdit;
+  const canManageCoreActions = !!canManageCore;
   const canManageProtocoloDocs = ['admin', 'comercial', 'compras'].includes(
     String(currentUser?.role || '').toLowerCase()
   );
   const bloquearEdicionComercial = () => {
     if (!canEditProtocolo) {
       alert('El rol Comercial no puede editar protocolos.');
+      return true;
+    }
+    return false;
+  };
+  const bloquearGestionCore = () => {
+    if (!canManageCoreActions) {
+      alert('No tienes permisos para esta acción en protocolos.');
       return true;
     }
     return false;
@@ -7899,7 +7912,7 @@ const VistaDetalleProtocolo = ({
   };
 
   const guardarFacturaProtocolo = async (facturaData) => {
-    if (bloquearEdicionComercial()) return;
+    if (bloquearGestionCore()) return;
     const neto = Number(facturaData.montoNeto) || 0;
     const iva = facturaData.iva !== '' && facturaData.iva !== null
       ? Number(facturaData.iva) || 0
@@ -8215,7 +8228,7 @@ const VistaDetalleProtocolo = ({
               <ShoppingCart className="w-5 h-5 inline mr-2" />
               Adjudicar Compra (Crear OC)
             </button>
-            {canEditProtocolo && (
+            {canManageCoreActions && (
               <button
                 onClick={() => {
                   setFacturaEnEdicion(null);
@@ -8228,9 +8241,10 @@ const VistaDetalleProtocolo = ({
                 Agregar Factura
               </button>
             )}
-            {canEditProtocolo && (
+            {canManageCoreActions && (
               <button
                 onClick={async () => {
+                  if (bloquearGestionCore()) return;
                   const ocCliente = prompt('Ingrese el número de OC del cliente:');
                   if (ocCliente) {
                     try {
@@ -8248,7 +8262,7 @@ const VistaDetalleProtocolo = ({
                 📄 Ingresar OC Cliente
               </button>
             )}
-            {canEditProtocolo && (
+            {canManageCoreActions && (
               <button
                 onClick={() => setEditingFechas(!editingFechas)}
                 className="px-6 py-3 bg-white border-2 rounded-xl font-semibold hover:bg-gray-50 transition-all"
@@ -8304,7 +8318,7 @@ const VistaDetalleProtocolo = ({
           />
 
           {/* Editor de fechas de producción */}
-          {canEditProtocolo && editingFechas && (
+          {canManageCoreActions && editingFechas && (
             <div className="mt-4 p-4 bg-gray-50 rounded-xl border-2 border-[#45ad98]/30">
               <div className="flex items-end space-x-4">
                 <div>
@@ -8682,8 +8696,8 @@ const VistaDetalleProtocolo = ({
         />
       )}
 
-	      {canEditProtocolo && showFacturaModal && (
-	        <FacturaProtocoloModal
+		      {canManageCoreActions && showFacturaModal && (
+		        <FacturaProtocoloModal
           factura={facturaEnEdicion}
           onClose={() => {
             setShowFacturaModal(false);
