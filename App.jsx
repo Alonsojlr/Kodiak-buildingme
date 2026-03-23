@@ -7614,9 +7614,19 @@ const VistaDetalleProtocolo = ({
   canEdit = true
 }) => {
   const canEditProtocolo = !!canEdit;
+  const canManageProtocoloDocs = ['admin', 'comercial', 'compras'].includes(
+    String(currentUser?.role || '').toLowerCase()
+  );
   const bloquearEdicionComercial = () => {
     if (!canEditProtocolo) {
       alert('El rol Comercial no puede editar protocolos.');
+      return true;
+    }
+    return false;
+  };
+  const bloquearGestionDocumentos = () => {
+    if (!canManageProtocoloDocs) {
+      alert('No tienes permisos para gestionar documentos del protocolo.');
       return true;
     }
     return false;
@@ -7716,7 +7726,7 @@ const VistaDetalleProtocolo = ({
   };
 
   const subirDocumentoProtocolo = async (tipoDocumento, file, facturaObjetivo = null) => {
-    if (bloquearEdicionComercial()) return false;
+    if (bloquearGestionDocumentos()) return false;
     if (!file) return false;
 
     const isPdfByType = String(file.type || '').toLowerCase() === 'application/pdf';
@@ -7768,7 +7778,7 @@ const VistaDetalleProtocolo = ({
   };
 
   const onSubirFacturaClick = () => {
-    if (bloquearEdicionComercial()) return;
+    if (bloquearGestionDocumentos()) return;
     if (!facturasConNumero.length) {
       alert('Primero agrega al menos una Factura BM con número para poder asociar el PDF.');
       return;
@@ -7777,7 +7787,7 @@ const VistaDetalleProtocolo = ({
   };
 
   const onConfirmUploadFacturaDoc = async ({ facturaId, file }) => {
-    if (bloquearEdicionComercial()) return;
+    if (bloquearGestionDocumentos()) return;
     const facturaObjetivo = facturasConNumero.find((factura) => String(factura.id) === String(facturaId));
     if (!facturaObjetivo) {
       alert('Selecciona una factura válida.');
@@ -7790,7 +7800,7 @@ const VistaDetalleProtocolo = ({
   };
 
   const onOcFileChange = async (event) => {
-    if (bloquearEdicionComercial()) return;
+    if (bloquearGestionDocumentos()) return;
     const file = event.target?.files?.[0];
     event.target.value = '';
     await subirDocumentoProtocolo('oc', file);
@@ -8248,7 +8258,7 @@ const VistaDetalleProtocolo = ({
                 Fechas Produccion
               </button>
             )}
-            {canEditProtocolo && (
+            {canManageProtocoloDocs && (
               <button
                 onClick={onSubirFacturaClick}
                 className="px-6 py-3 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-60"
@@ -8259,7 +8269,7 @@ const VistaDetalleProtocolo = ({
                 {uploadingDocType === 'factura' ? 'Subiendo Factura...' : 'Subir Factura'}
               </button>
             )}
-            {canEditProtocolo && (
+            {canManageProtocoloDocs && (
               <button
                 onClick={() => ocFileInputRef.current?.click()}
                 className="px-6 py-3 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-60"
@@ -8663,7 +8673,7 @@ const VistaDetalleProtocolo = ({
         />
       )}
 
-	      {canEditProtocolo && showUploadFacturaDocModal && (
+	      {canManageProtocoloDocs && showUploadFacturaDocModal && (
 	        <UploadFacturaDocumentoModal
           facturas={facturasConNumero}
           isUploading={uploadingDocType === 'factura'}
