@@ -6403,10 +6403,13 @@ const ProtocolosModule = ({
         const cotizacion =
           cotizacionesByFolio.get(String(p.folio)) ??
           cotizacionesByNumero.get(normalizarNumero(p.numeroCotizacion));
+        const netoCotizacion = cotizacion ? calcularNetoCotizacion(cotizacion) : undefined;
+        const netoPreferente =
+          Number.isFinite(p.montoNeto) ? p.montoNeto : (netoCotizacion ?? p.montoNetoCotizacion);
         return ({
           ...p,
           items: p.items && p.items.length ? p.items : (cotizacion?.items || []),
-          montoNetoCotizacion: cotizacion ? calcularNetoCotizacion(cotizacion) : p.montoNetoCotizacion
+          montoNetoCotizacion: netoPreferente
         });
       })
     );
@@ -6490,7 +6493,9 @@ const ProtocolosModule = ({
           cotizacionesByNumero.get(normalizarNumero(p.numero_cotizacion));
         const netoCotizacion = cotizacion ? calcularNetoCotizacion(cotizacion) : undefined;
         const netoProtocoloGuardado = parseFloat(p.monto_neto);
-        const netoEfectivo = netoCotizacion ?? (Number.isFinite(netoProtocoloGuardado) ? netoProtocoloGuardado : undefined);
+        const netoEfectivo = Number.isFinite(netoProtocoloGuardado)
+          ? netoProtocoloGuardado
+          : netoCotizacion;
         return {
           id: p.id,
           folio: p.folio,
@@ -13576,7 +13581,9 @@ const Dashboard = ({ user, onLogout }) => {
           cotizacionesByFolio.get(String(p.folio)) ??
           cotizacionesByNumero.get(normalizarNumero(p.numero_cotizacion));
         const netoProtocoloGuardado = parseFloat(p.monto_neto);
-        const netoEfectivo = netoCotizacion ?? (Number.isFinite(netoProtocoloGuardado) ? netoProtocoloGuardado : undefined);
+        const netoEfectivo = Number.isFinite(netoProtocoloGuardado)
+          ? netoProtocoloGuardado
+          : netoCotizacion;
         return {
           montoNeto: Number.isFinite(netoProtocoloGuardado) ? netoProtocoloGuardado : undefined,
           montoNetoCotizacion: netoEfectivo
