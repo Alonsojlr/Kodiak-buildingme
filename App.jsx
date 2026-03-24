@@ -11454,7 +11454,8 @@ const [showNewModal, setShowNewModal] = useState(false);
         direccionCliente: cot.clientes?.direccion || cot.direccion || '',
         contactoCliente: cot.clientes?.persona_encargada || cot.contacto || '',
         unidadNegocio: cot.unidad_negocio,
-        monto: parseFloat(cot.monto),
+        monto: parseFloat(cot.neto || cot.monto) || 0,
+        neto: cot.neto !== undefined && cot.neto !== null ? parseFloat(cot.neto) : null,
         estado: cot.estado,
         cotizadoPor: cot.cotizado_por,
         condicionesPago: cot.condiciones_pago,
@@ -13696,6 +13697,7 @@ const Dashboard = ({ user, onLogout }) => {
         );
         const cotizacionesByNumero = new Map(
           (cotData || []).map((cot) => [normalizarNumero(cot.numero), calcularNetoCotizacion({
+            neto: cot.neto !== undefined && cot.neto !== null ? parseFloat(cot.neto) : undefined,
             items: cot.items || [],
             monto: parseFloat(cot.monto) || 0
           })])
@@ -13704,6 +13706,7 @@ const Dashboard = ({ user, onLogout }) => {
           (cotData || [])
             .filter((cot) => cot.adjudicada_a_protocolo)
             .map((cot) => [String(cot.adjudicada_a_protocolo), calcularNetoCotizacion({
+              neto: cot.neto !== undefined && cot.neto !== null ? parseFloat(cot.neto) : undefined,
               items: cot.items || [],
               monto: parseFloat(cot.monto) || 0
             })])
@@ -13752,8 +13755,8 @@ const Dashboard = ({ user, onLogout }) => {
           }))
         : 30649;
 
-      // Calcular neto desde la cotización
-      const netoCalculado = cotizacion.monto || 0; // Ya es neto después de las correcciones
+      // Calcular neto real desde la cotización (prioriza campo neto, luego items, luego monto)
+      const netoCalculado = Number(calcularNetoCotizacion(cotizacion)) || 0;
       const totalCalculado = netoCalculado * 1.19; // Total con IVA
 
       const nuevoProtocolo = {
