@@ -4004,7 +4004,7 @@ const NuevaOCModal = ({ onClose, onSave, currentUserName }) => {
 
   const calcularSubtotalItem = (item) => {
     const valorUnitario = Number(item.valorUnitario ?? item.valor_unitario ?? 0) || 0;
-    const cantidad = Number(item.cantidad || 0) || 0;
+    const cantidad = parseFloat(String(item.cantidad || 0).replace(',', '.')) || 0;
     const subtotal = cantidad * valorUnitario;
     const descuento = subtotal * ((Number(item.descuento) || 0) / 100);
     return subtotal - descuento;
@@ -4058,7 +4058,11 @@ const NuevaOCModal = ({ onClose, onSave, currentUserName }) => {
       return;
     }
     const { subtotal, iva, total } = calcularTotales();
-    setPendingData({ ...formData, proveedorId, subtotal, iva, total });
+    const itemsNormalizados = formData.items.map(item => ({
+      ...item,
+      cantidad: parseFloat(String(item.cantidad || 0).replace(',', '.')) || 0
+    }));
+    setPendingData({ ...formData, items: itemsNormalizados, proveedorId, subtotal, iva, total });
     setShowConfirm(true);
   };
 
@@ -4358,10 +4362,10 @@ const NuevaOCModal = ({ onClose, onSave, currentUserName }) => {
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">Cantidad</label>
                       <input
-                        type="number"
-                        min="0"
+                        type="text"
+                        inputMode="decimal"
                         value={item.cantidad === 0 ? '' : item.cantidad}
-                        onChange={(e) => actualizarItem(item.id, 'cantidad', parseInt(e.target.value) || 0)}
+                        onChange={(e) => actualizarItem(item.id, 'cantidad', e.target.value)}
                         className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#45ad98]"
                       />
                     </div>
@@ -4406,11 +4410,11 @@ const NuevaOCModal = ({ onClose, onSave, currentUserName }) => {
                     </div>
                     <div className="md:col-span-6">
                       <label className="block text-sm font-semibold text-gray-700 mb-2">Descripción</label>
-                      <input
-                        type="text"
+                      <textarea
                         value={item.descripcion}
                         onChange={(e) => actualizarItem(item.id, 'descripcion', e.target.value)}
-                        className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#45ad98]"
+                        rows="3"
+                        className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#45ad98] resize-none"
                       />
                     </div>
                   </div>
@@ -4894,7 +4898,7 @@ const DetalleOCModal = ({ orden: ordenInicial, onClose, onUpdate, onSave, onSave
                         type="number"
                         min="0"
                         value={item.cantidad === 0 ? '' : item.cantidad}
-                        onChange={(e) => actualizarItem(item.id, 'cantidad', parseInt(e.target.value) || 0)}
+                        onChange={(e) => actualizarItem(item.id, 'cantidad', e.target.value)}
                         disabled
                         className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#45ad98] disabled:bg-gray-100"
                       />
@@ -6226,6 +6230,7 @@ const ProtocolosModule = ({
   const [showDetalleOC, setShowDetalleOC] = useState(false);
   const [ordenDetalle, setOrdenDetalle] = useState(null);
   const [detalleEditMode, setDetalleEditMode] = useState(false);
+  const [confirmDeleteProt, setConfirmDeleteProt] = useState(null);
   const protocolosRef = useRef([]);
   const vistaActualRef = useRef('listado');
   const protocoloSeleccionadoRef = useRef(null);
@@ -6931,21 +6936,12 @@ const ProtocolosModule = ({
               setVistaActual('detalle');
             }} 
             onNuevoProtocolo={() => setShowNewModal(true)}
-            onEliminar={async (protocolo) => {
+            onEliminar={(protocolo) => {
               if (!canEditDeleteProtocolos) {
                 alert('El rol Comercial no puede eliminar protocolos.');
                 return;
               }
-              if (!window.confirm(`¿Estás seguro de eliminar el protocolo ${protocolo.folio}?`)) return;
-              try {
-                await deleteProtocolo(protocolo.id);
-                setProtocolos(prev => prev.filter(p => p.id !== protocolo.id));
-                setSharedProtocolos(prev => prev.filter(p => p.id !== protocolo.id));
-                alert('Protocolo eliminado exitosamente');
-              } catch (error) {
-                console.error('Error:', error);
-                alert('Error al eliminar protocolo');
-              }
+              setConfirmDeleteProt(protocolo);
             }}
           />
 
@@ -7030,6 +7026,24 @@ const ProtocolosModule = ({
               alert('Error al crear protocolo');
             }
           }}
+        />
+      )}
+      {confirmDeleteProt && (
+        <ConfirmDialog
+          message={`¿Está seguro de eliminar el Protocolo ${confirmDeleteProt.folio}? Esta acción no se puede deshacer.`}
+          onConfirm={async () => {
+            const protocolo = confirmDeleteProt;
+            setConfirmDeleteProt(null);
+            try {
+              await deleteProtocolo(protocolo.id);
+              setProtocolos(prev => prev.filter(p => p.id !== protocolo.id));
+              setSharedProtocolos(prev => prev.filter(p => p.id !== protocolo.id));
+            } catch (error) {
+              console.error('Error:', error);
+              alert('Error al eliminar protocolo');
+            }
+          }}
+          onCancel={() => setConfirmDeleteProt(null)}
         />
       )}
     </>
@@ -9624,10 +9638,10 @@ const FormularioOCDesdeProtocolo = ({ datosProtocolo, onClose, onGuardar, curren
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">Cantidad</label>
                       <input
-                        type="number"
-                        min="0"
+                        type="text"
+                        inputMode="decimal"
                         value={item.cantidad === 0 ? '' : item.cantidad}
-                        onChange={(e) => actualizarItem(item.id, 'cantidad', parseInt(e.target.value) || 0)}
+                        onChange={(e) => actualizarItem(item.id, 'cantidad', e.target.value)}
                         className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#45ad98]"
                       />
                     </div>
@@ -9672,11 +9686,11 @@ const FormularioOCDesdeProtocolo = ({ datosProtocolo, onClose, onGuardar, curren
                     </div>
                     <div className="md:col-span-6">
                       <label className="block text-sm font-semibold text-gray-700 mb-2">Descripción</label>
-                      <input
-                        type="text"
+                      <textarea
                         value={item.descripcion}
                         onChange={(e) => actualizarItem(item.id, 'descripcion', e.target.value)}
-                        className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#45ad98]"
+                        rows="3"
+                        className="w-full px-3 py-2 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-[#45ad98] resize-none"
                       />
                     </div>
                   </div>
@@ -9751,9 +9765,12 @@ const FormularioOCDesdeProtocolo = ({ datosProtocolo, onClose, onGuardar, curren
 // Modal Nuevo Protocolo (mantener el existente o simplificado)
 // Modal Nuevo Protocolo (Adjudicar Venta)
 const NuevoProtocoloModal = ({ onClose, onSave, sharedCotizaciones }) => {
- const [cotizaciones, setCotizaciones] = useState([]);
+  const [cotizaciones, setCotizaciones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedCotizacion, setSelectedCotizacion] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [pendingData, setPendingData] = useState(null);
 
   useEffect(() => {
     const cargarCotizaciones = async () => {
@@ -9788,19 +9805,17 @@ const NuevoProtocoloModal = ({ onClose, onSave, sharedCotizaciones }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (isSaving) return;
     if (!selectedCotizacion) {
       alert('Por favor selecciona una cotización');
       return;
     }
-    
     const cotizacion = cotizacionesGanadas.find(c => c.numero === selectedCotizacion);
-    
     if (!cotizacion) {
       alert('Cotización no encontrada');
       return;
     }
-    
-    onSave({
+    setPendingData({
       numeroCotizacion: cotizacion.numero,
       clienteId: cotizacion.clienteId,
       nombreProyecto: cotizacion.nombreProyecto,
@@ -9808,6 +9823,19 @@ const NuevoProtocoloModal = ({ onClose, onSave, sharedCotizaciones }) => {
       montoTotal: cotizacion.monto,
       tipo: 'Venta'
     });
+    setShowConfirm(true);
+  };
+
+  const handleConfirmCreate = async () => {
+    setShowConfirm(false);
+    if (!pendingData || isSaving) return;
+    setIsSaving(true);
+    try {
+      await onSave(pendingData);
+    } finally {
+      setIsSaving(false);
+      setPendingData(null);
+    }
   };
 
   return (
@@ -9855,13 +9883,21 @@ const NuevoProtocoloModal = ({ onClose, onSave, sharedCotizaciones }) => {
             </button>
             <button
               type="submit"
-              className="px-6 py-3 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all"
+              disabled={isSaving}
+              className="px-6 py-3 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
             >
-              Crear Protocolo
+              {isSaving ? 'Creando...' : 'Crear Protocolo'}
             </button>
           </div>
         </form>
+        {showConfirm && (
+          <ConfirmDialog
+            message="¿Está seguro de crear este Protocolo?"
+            onConfirm={handleConfirmCreate}
+            onCancel={() => { setShowConfirm(false); setPendingData(null); }}
+          />
+        )}
       </div>
     </div>
   );
@@ -11498,6 +11534,7 @@ const [showNewModal, setShowNewModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterEstado, setFilterEstado] = useState('todas');
+  const [confirmDeleteCot, setConfirmDeleteCot] = useState(null);
   const [documentoModal, setDocumentoModal] = useState({
     abierto: false,
     titulo: '',
@@ -11943,18 +11980,7 @@ const [showNewModal, setShowNewModal] = useState(false);
                       </button>
                       {canEditDeleteCotizaciones && (
                         <button
-                          onClick={async () => {
-                            if (window.confirm('¿Estás seguro de eliminar esta cotización?')) {
-                              try {
-                                await deleteCotizacion(cot.id);
-                                await loadCotizaciones();
-                                alert('Cotización eliminada');
-                              } catch (error) {
-                                console.error('Error:', error);
-                                alert('Error al eliminar');
-                              }
-                            }
-                          }}
+                          onClick={() => setConfirmDeleteCot(cot)}
                           className="p-2 bg-red-100 hover:bg-red-200 rounded-lg transition-colors"
                           title="Eliminar Cotización"
                         >
@@ -12231,11 +12257,30 @@ const [showNewModal, setShowNewModal] = useState(false);
           </div>
         </div>
       )}
+      {confirmDeleteCot && (
+        <ConfirmDialog
+          message={`¿Está seguro de eliminar la Cotización #${confirmDeleteCot.numero}? Esta acción no se puede deshacer.`}
+          onConfirm={async () => {
+            const cot = confirmDeleteCot;
+            setConfirmDeleteCot(null);
+            try {
+              await deleteCotizacion(cot.id);
+              await loadCotizaciones();
+            } catch (error) {
+              console.error('Error:', error);
+              alert('Error al eliminar');
+            }
+          }}
+          onCancel={() => setConfirmDeleteCot(null)}
+        />
+      )}
     </div>
   );
 };
 
 const EditarCotizacionModal = ({ cotizacion, onClose, onSave }) => {
+  const [isSaving, setIsSaving] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [formData, setFormData] = useState({
     fecha: cotizacion.fecha || new Date().toISOString().split('T')[0],
     nombreProyecto: cotizacion.nombreProyecto || '',
@@ -12305,7 +12350,8 @@ const EditarCotizacionModal = ({ cotizacion, onClose, onSave }) => {
   };
 
   const calcularSubtotalItem = (item) => {
-    const subtotal = item.cantidad * item.valorUnitario;
+    const cantidad = parseFloat(String(item.cantidad || 0).replace(',', '.')) || 0;
+    const subtotal = cantidad * item.valorUnitario;
     const descuento = subtotal * (item.descuento / 100);
     return subtotal - descuento;
   };
@@ -12319,23 +12365,34 @@ const EditarCotizacionModal = ({ cotizacion, onClose, onSave }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const { subtotal } = calcularTotales();
-    onSave({
-      fecha: formData.fecha,
-      nombre_proyecto: formData.nombreProyecto,
-      unidad_negocio: formData.unidadNegocio,
-      condiciones_pago: formData.condicionesPago,
-      cotizado_por: formData.cotizadoPor,
-      neto: subtotal,
-      monto: subtotal,
-      estado: formData.estado,
-      items: (formData.items || []).map(item => ({
-        ...item,
-        cantidad: Number(item.cantidad) || 0,
-        valorUnitario: Number(item.valorUnitario) || 0,
-        descuento: Number(item.descuento) || 0
-      }))
-    });
+    if (isSaving) return;
+    setShowConfirm(true);
+  };
+
+  const handleConfirmSave = async () => {
+    setShowConfirm(false);
+    setIsSaving(true);
+    try {
+      const { subtotal } = calcularTotales();
+      await onSave({
+        fecha: formData.fecha,
+        nombre_proyecto: formData.nombreProyecto,
+        unidad_negocio: formData.unidadNegocio,
+        condiciones_pago: formData.condicionesPago,
+        cotizado_por: formData.cotizadoPor,
+        neto: subtotal,
+        monto: subtotal,
+        estado: formData.estado,
+        items: (formData.items || []).map(item => ({
+          ...item,
+          cantidad: parseFloat(String(item.cantidad || 0).replace(',', '.')) || 0,
+          valorUnitario: Number(item.valorUnitario) || 0,
+          descuento: Number(item.descuento) || 0
+        }))
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const totales = calcularTotales();
@@ -12479,20 +12536,20 @@ const EditarCotizacionModal = ({ cotizacion, onClose, onSave }) => {
                     <div>
                       <label className="block text-xs font-semibold text-gray-600 mb-1">Cantidad</label>
                       <input
-                        type="number"
-                        min="0"
+                        type="text"
+                        inputMode="decimal"
                         value={item.cantidad === 0 ? '' : item.cantidad}
-                        onChange={(e) => actualizarItem(item.id, 'cantidad', parseInt(e.target.value) || 0)}
+                        onChange={(e) => actualizarItem(item.id, 'cantidad', e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#45ad98] text-sm"
                       />
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-xs font-semibold text-gray-600 mb-1">Descripción</label>
-                      <input
-                        type="text"
+                      <textarea
                         value={item.descripcion}
                         onChange={(e) => actualizarItem(item.id, 'descripcion', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#45ad98] text-sm"
+                        rows="3"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#45ad98] text-sm resize-none"
                       />
                     </div>
                     <div>
@@ -12568,13 +12625,21 @@ const EditarCotizacionModal = ({ cotizacion, onClose, onSave }) => {
             </button>
             <button
               type="submit"
-              className="px-6 py-3 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all"
+              disabled={isSaving}
+              className="px-6 py-3 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
             >
-              Guardar Cambios
+              {isSaving ? 'Guardando...' : 'Guardar Cambios'}
             </button>
           </div>
         </form>
+        {showConfirm && (
+          <ConfirmDialog
+            message="¿Está seguro de guardar los cambios en esta Cotización?"
+            onConfirm={handleConfirmSave}
+            onCancel={() => setShowConfirm(false)}
+          />
+        )}
       </div>
     </div>
   );
@@ -12607,6 +12672,10 @@ const NuevaCotizacionModal = ({ onClose, onSave, currentUserName }) => {
     if (!currentUserName) return;
     setFormData(prev => (prev.cotizadoPor ? prev : { ...prev, cotizadoPor: currentUserName }));
   }, [currentUserName]);
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [pendingData, setPendingData] = useState(null);
 
   const [clientes, setClientes] = useState([]);
   const [clientesError, setClientesError] = useState('');
@@ -12750,7 +12819,8 @@ const NuevaCotizacionModal = ({ onClose, onSave, currentUserName }) => {
   };
 
   const calcularSubtotalItem = (item) => {
-    const subtotal = item.cantidad * item.valorUnitario;
+    const cantidad = parseFloat(String(item.cantidad || 0).replace(',', '.')) || 0;
+    const subtotal = cantidad * item.valorUnitario;
     const descuento = subtotal * (item.descuento / 100);
     return subtotal - descuento;
   };
@@ -12778,43 +12848,53 @@ const NuevaCotizacionModal = ({ onClose, onSave, currentUserName }) => {
     return null;
   };
 
- const handleSubmit = async (e) => {
-  e.preventDefault();
-  
-  try {
-    const clienteId = resolverClienteId();
-    if (!clienteId) {
-      alert('Selecciona un cliente de la lista o búscalo por código.');
-      return;
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (isSaving) return;
+    try {
+      const clienteId = resolverClienteId();
+      if (!clienteId) {
+        alert('Selecciona un cliente de la lista o búscalo por código.');
+        return;
+      }
+      const cotizaciones = await getCotizaciones();
+      const ultimoNumero = cotizaciones.length > 0
+        ? Math.max(...cotizaciones.map(c => parseInt(c.numero) || 5540))
+        : 5540;
+      const { subtotal } = calcularTotales();
+      const nuevaCotizacion = {
+        numero: `${ultimoNumero + 1}`,
+        ...formData,
+        clienteId,
+        neto: subtotal,
+        monto: subtotal,
+        estado: 'emitida',
+        items: (formData.items || []).map(item => ({
+          ...item,
+          cantidad: parseFloat(String(item.cantidad || 0).replace(',', '.')) || 0,
+          valorUnitario: Number(item.valorUnitario) || 0,
+          descuento: Number(item.descuento) || 0
+        }))
+      };
+      setPendingData(nuevaCotizacion);
+      setShowConfirm(true);
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error al preparar cotización');
     }
-    // Obtener todas las cotizaciones para calcular el siguiente número
-    const cotizaciones = await getCotizaciones();
-    const ultimoNumero = cotizaciones.length > 0
-      ? Math.max(...cotizaciones.map(c => parseInt(c.numero) || 5540))
-      : 5540;
-    
-    const { subtotal } = calcularTotales();
-    const nuevaCotizacion = {
-      numero: `${ultimoNumero + 1}`,
-      ...formData,
-      clienteId,
-      neto: subtotal,
-      monto: subtotal,
-      estado: 'emitida',
-      items: (formData.items || []).map(item => ({
-        ...item,
-        cantidad: Number(item.cantidad) || 0,
-        valorUnitario: Number(item.valorUnitario) || 0,
-        descuento: Number(item.descuento) || 0
-      }))
-    };
-    
-    onSave(nuevaCotizacion);
-  } catch (error) {
-    console.error('Error:', error);
-    alert('Error al crear cotización');
-  }
-};
+  };
+
+  const handleConfirmCreate = async () => {
+    setShowConfirm(false);
+    if (!pendingData || isSaving) return;
+    setIsSaving(true);
+    try {
+      await onSave(pendingData);
+    } finally {
+      setIsSaving(false);
+      setPendingData(null);
+    }
+  };
 
   const totales = calcularTotales();
 
@@ -13093,20 +13173,20 @@ const NuevaCotizacionModal = ({ onClose, onSave, currentUserName }) => {
                     <div>
                       <label className="block text-xs font-semibold text-gray-600 mb-1">Cantidad</label>
                       <input
-                        type="number"
-                        min="0"
+                        type="text"
+                        inputMode="decimal"
                         value={item.cantidad === 0 ? '' : item.cantidad}
-                        onChange={(e) => actualizarItem(item.id, 'cantidad', parseInt(e.target.value) || 0)}
+                        onChange={(e) => actualizarItem(item.id, 'cantidad', e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#45ad98] text-sm"
                       />
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-xs font-semibold text-gray-600 mb-1">Descripción</label>
-                      <input
-                        type="text"
+                      <textarea
                         value={item.descripcion}
                         onChange={(e) => actualizarItem(item.id, 'descripcion', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#45ad98] text-sm"
+                        rows="3"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-[#45ad98] text-sm resize-none"
                       />
                     </div>
                     <div>
@@ -13212,13 +13292,21 @@ const NuevaCotizacionModal = ({ onClose, onSave, currentUserName }) => {
             </button>
             <button
               type="submit"
-              className="px-6 py-3 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all"
+              disabled={isSaving}
+              className="px-6 py-3 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
             >
-              Crear Cotización
+              {isSaving ? 'Creando...' : 'Crear Cotización'}
             </button>
           </div>
         </form>
+        {showConfirm && (
+          <ConfirmDialog
+            message="¿Está seguro de crear esta Cotización?"
+            onConfirm={handleConfirmCreate}
+            onCancel={() => { setShowConfirm(false); setPendingData(null); }}
+          />
+        )}
       </div>
     </div>
   );
