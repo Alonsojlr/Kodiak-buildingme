@@ -17,7 +17,7 @@ import { getProveedores, createProveedor, updateProveedor, deleteProveedor } fro
 import { autenticarUsuario, cerrarSesion, obtenerSesionActual, getUsuarios, createUsuario, updateUsuario, deleteUsuario } from './src/api/usuarios';
 import { getInventarioItems, getInventarioReservas, createInventarioItem, updateInventarioItem, deleteInventarioItem, createInventarioReserva, updateInventarioReserva, deleteInventarioReserva, deleteInventarioReservasByItem } from './src/api/inventario';
 import { getGastosAdministracion, createGastoAdministracion, updateGastoAdministracion, deleteGastoAdministracion } from './src/api/administracion';
-import { BarChart3, FileText, ShoppingCart, Package, Users, Building2, Settings, LogOut, TrendingUp, Clock, DollarSign, CheckCircle, XCircle, Pause, Download, Calendar, ChevronLeft, ChevronRight, Plus, Trash2, Edit2, Edit3, Star, ClipboardCheck, MessageCircle, ZoomIn, ZoomOut } from 'lucide-react';
+import { BarChart3, FileText, ShoppingCart, Package, Users, Building2, Settings, LogOut, TrendingUp, Clock, DollarSign, CheckCircle, XCircle, Pause, Download, Calendar, ChevronLeft, ChevronRight, Plus, Trash2, Edit2, Edit3, Star, ClipboardCheck, MessageCircle, ZoomIn, ZoomOut, AlertTriangle } from 'lucide-react';
 import { generarCotizacionPDF, generarOCPDF, generarProtocoloPDF } from './src/utils/documentGenerator';
 import AuditoriasModule from './src/components/auditorias/AuditoriasModule';
 
@@ -3011,6 +3011,7 @@ const OrdenesCompraModule = ({
   const [ordenSeleccionada, setOrdenSeleccionada] = useState(null);
   const [showBuscarProtocolo, setShowBuscarProtocolo] = useState(false);
   const [datosOCDesdeProtocolo, setDatosOCDesdeProtocolo] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
   
   // Abrir modal automáticamente si hay datosPreOC
   useEffect(() => {
@@ -3571,17 +3572,7 @@ const OrdenesCompraModule = ({
                         <Download className="w-4 h-4 text-blue-600" />
                       </button>
                       <button
-                        onClick={async () => {
-                          if (!window.confirm(`¿Eliminar la OC ${orden.numero}?`)) return;
-                          try {
-                            await deleteOrdenCompra(orden.id);
-                            setSharedOrdenesCompra(prev => prev.filter(o => o.id !== orden.id));
-                            setOrdenes(prev => prev.filter(o => o.id !== orden.id));
-                          } catch (error) {
-                            console.error('Error eliminando OC:', error);
-                            alert('Error al eliminar la OC');
-                          }
-                        }}
+                        onClick={() => setConfirmDelete(orden)}
                         className="p-2 bg-red-100 hover:bg-red-200 rounded-lg transition-colors"
                         title="Eliminar"
                       >
@@ -3816,9 +3807,57 @@ const OrdenesCompraModule = ({
           }}
         />
       )}
+      {confirmDelete && (
+        <ConfirmDialog
+          message={`¿Está seguro de eliminar la OC ${confirmDelete.numero}? Esta acción no se puede deshacer.`}
+          onConfirm={async () => {
+            const orden = confirmDelete;
+            setConfirmDelete(null);
+            try {
+              await deleteOrdenCompra(orden.id);
+              setSharedOrdenesCompra(prev => prev.filter(o => o.id !== orden.id));
+              setOrdenes(prev => prev.filter(o => o.id !== orden.id));
+            } catch (error) {
+              console.error('Error eliminando OC:', error);
+              alert('Error al eliminar la OC');
+            }
+          }}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
     </div>
   );
 };
+
+// Diálogo de confirmación reutilizable para OC
+const ConfirmDialog = ({ message, onConfirm, onCancel }) => (
+  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[200] p-4">
+    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+          <AlertTriangle className="w-5 h-5 text-amber-500" />
+        </div>
+        <h3 className="text-lg font-bold text-gray-800">Confirmar acción</h3>
+      </div>
+      <p className="text-gray-600 mb-6">{message || '¿Está seguro de realizar este cambio?'}</p>
+      <div className="flex justify-end gap-3">
+        <button
+          onClick={onCancel}
+          className="px-5 py-2 border-2 border-gray-300 rounded-xl text-gray-700 font-semibold hover:bg-gray-50 transition-colors"
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={onConfirm}
+          className="px-5 py-2 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all"
+          style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
+        >
+          OK
+        </button>
+      </div>
+    </div>
+  </div>
+);
 
 // Modal Nueva OC Manual
 const NuevaOCModal = ({ onClose, onSave, currentUserName }) => {
@@ -3845,6 +3884,9 @@ const NuevaOCModal = ({ onClose, onSave, currentUserName }) => {
     observaciones: ''
   });
   const [showBodegaModal, setShowBodegaModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [pendingData, setPendingData] = useState(null);
 
   const [proveedores, setProveedores] = useState([]);
   const [proveedoresError, setProveedoresError] = useState('');
@@ -4009,13 +4051,27 @@ const NuevaOCModal = ({ onClose, onSave, currentUserName }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (isSaving) return;
     const proveedorId = resolverProveedorId();
     if (!proveedorId) {
       alert('Selecciona un proveedor de la lista o búscalo por código.');
       return;
     }
     const { subtotal, iva, total } = calcularTotales();
-    onSave({ ...formData, proveedorId, subtotal, iva, total });
+    setPendingData({ ...formData, proveedorId, subtotal, iva, total });
+    setShowConfirm(true);
+  };
+
+  const handleConfirmCreate = async () => {
+    setShowConfirm(false);
+    if (!pendingData || isSaving) return;
+    setIsSaving(true);
+    try {
+      await onSave(pendingData);
+    } finally {
+      setIsSaving(false);
+      setPendingData(null);
+    }
   };
 
   const totales = calcularTotales();
@@ -4412,19 +4468,28 @@ const NuevaOCModal = ({ onClose, onSave, currentUserName }) => {
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-3 border-2 border-gray-300 rounded-xl text-gray-700 font-semibold hover:bg-gray-50 transition-colors"
+              disabled={isSaving}
+              className="px-6 py-3 border-2 border-gray-300 rounded-xl text-gray-700 font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="px-6 py-3 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all"
+              disabled={isSaving}
+              className="px-6 py-3 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
             >
-              Crear Orden de Compra
+              {isSaving ? 'Creando...' : 'Crear Orden de Compra'}
             </button>
           </div>
         </form>
+        {showConfirm && (
+          <ConfirmDialog
+            message="¿Está seguro de crear esta Orden de Compra?"
+            onConfirm={handleConfirmCreate}
+            onCancel={() => { setShowConfirm(false); setPendingData(null); }}
+          />
+        )}
       </div>
       {showBodegaModal && (
         <BodegaItemsModal
@@ -4443,6 +4508,7 @@ const DetalleOCModal = ({ orden: ordenInicial, onClose, onUpdate, onSave, onSave
   const [showFacturaModal, setShowFacturaModal] = useState(false);
   const [isEditing, setIsEditing] = useState(startInEdit);
   const [isSaving, setIsSaving] = useState(false);
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [proveedores, setProveedores] = useState([]);
   const prevOrdenIdRef = useRef(ordenInicial?.id);
 
@@ -4936,15 +5002,9 @@ const DetalleOCModal = ({ orden: ordenInicial, onClose, onUpdate, onSave, onSave
         <div className="p-6 border-t border-gray-200 bg-gray-50 flex justify-end space-x-3">
           {isEditing && (
             <button
-              onClick={async () => {
+              onClick={() => {
                 if (isSaving) return;
-                setIsSaving(true);
-                try {
-                  const itemsLimpios = limpiarItems(orden.items || []);
-                  await onSave?.({ ...orden, items: itemsLimpios, subtotal: totales.subtotal, iva: totales.iva, total: totales.total });
-                } finally {
-                  setIsSaving(false);
-                }
+                setShowSaveConfirm(true);
               }}
               className="px-6 py-3 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
@@ -4969,6 +5029,22 @@ const DetalleOCModal = ({ orden: ordenInicial, onClose, onUpdate, onSave, onSave
               agregarFactura(payload);
               setShowFacturaModal(false);
             }}
+          />
+        )}
+        {showSaveConfirm && (
+          <ConfirmDialog
+            message="¿Está seguro de guardar los cambios en esta Orden de Compra?"
+            onConfirm={async () => {
+              setShowSaveConfirm(false);
+              setIsSaving(true);
+              try {
+                const itemsLimpios = limpiarItems(orden.items || []);
+                await onSave?.({ ...orden, items: itemsLimpios, subtotal: totales.subtotal, iva: totales.iva, total: totales.total });
+              } finally {
+                setIsSaving(false);
+              }
+            }}
+            onCancel={() => setShowSaveConfirm(false)}
           />
         )}
       </div>
