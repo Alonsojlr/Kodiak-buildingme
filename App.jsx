@@ -10424,6 +10424,19 @@ const ClientesModule = () => {
     loadClientes();
   }, []);
 
+  useEffect(() => {
+    const channel = supabase
+      .channel('clientes-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes' }, () => {
+        loadClientes();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clientes_contactos' }, () => {
+        loadClientes();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   const loadClientes = async () => {
     try {
       setLoading(true);
