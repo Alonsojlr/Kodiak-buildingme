@@ -6634,6 +6634,9 @@ const ProtocolosModule = ({
       .on('postgres_changes', { event: '*', schema: 'public', table: 'protocolos_items' }, () => {
         loadProtocolos();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes_compra_facturas' }, () => {
+        refrescarOrdenesCompra();
+      })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
