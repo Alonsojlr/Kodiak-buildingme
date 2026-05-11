@@ -5255,6 +5255,16 @@ const ProveedoresModule = () => {
     loadProveedores();
   }, []);
 
+  useEffect(() => {
+    const channel = supabase
+      .channel('proveedores-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'proveedores' }, () => {
+        loadProveedores();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   const loadProveedores = async () => {
     try {
       setLoading(true);
@@ -6503,6 +6513,9 @@ const ProtocolosModule = ({
     const channel = supabase
       .channel('protocolos-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'protocolos' }, () => {
+        loadProtocolos();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'protocolos_facturas' }, () => {
         loadProtocolos();
       })
       .subscribe();
