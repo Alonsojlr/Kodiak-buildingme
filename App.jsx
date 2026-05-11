@@ -3621,12 +3621,11 @@ const OrdenesCompraModule = ({
 
               await createOrdenCompra(ocData, nuevaOC.items || []);
               await loadOrdenes();
-
               setShowNewModal(false);
               alert('Orden de Compra creada exitosamente');
             } catch (error) {
-              console.error('Error:', error);
-              alert('Error al crear OC');
+              console.error('Error al crear OC:', error);
+              alert(`Error al crear OC: ${error.message || 'Error desconocido'}`);
             }
           }}
         />
@@ -3970,20 +3969,29 @@ const NuevaOCModal = ({ onClose, onSave, currentUserName }) => {
   };
 
   const agregarItemsDesdeBodega = (itemsBodega) => {
-    setFormData(prev => ({
-      ...prev,
-      items: [
-        ...prev.items,
-        ...itemsBodega.map((item, index) => ({
-          id: prev.items.length + index + 1,
-          item: item.item,
-          cantidad: item.cantidad,
-          descripcion: item.descripcion,
-          valorUnitario: item.valorUnitario,
-          descuento: item.descuento || 0
-        }))
-      ]
-    }));
+    setFormData(prev => {
+      const itemsExistentes = prev.items.filter(item =>
+        String(item.item || '').trim().length > 0 ||
+        String(item.descripcion || '').trim().length > 0 ||
+        Number(item.valorUnitario || 0) > 0 ||
+        Number(item.cantidad || 0) > 0
+      );
+      const baseId = Math.max(0, ...prev.items.map(i => i.id)) + 1;
+      return {
+        ...prev,
+        items: [
+          ...itemsExistentes,
+          ...itemsBodega.map((item, index) => ({
+            id: baseId + index,
+            item: item.item || '',
+            cantidad: item.cantidad || 0,
+            descripcion: item.descripcion || '',
+            valorUnitario: item.valorUnitario || 0,
+            descuento: item.descuento || 0
+          }))
+        ]
+      };
+    });
   };
 
   const eliminarItem = (id) => {
@@ -9272,20 +9280,29 @@ const FormularioOCDesdeProtocolo = ({ datosProtocolo, onClose, onGuardar, curren
   };
 
   const agregarItemsDesdeBodega = (itemsBodega) => {
-    setFormData(prev => ({
-      ...prev,
-      items: [
-        ...prev.items,
-        ...itemsBodega.map((item, index) => ({
-          id: prev.items.length + index + 1,
-          item: item.item,
-          cantidad: item.cantidad,
-          descripcion: item.descripcion,
-          valorUnitario: item.valorUnitario,
-          descuento: item.descuento || 0
-        }))
-      ]
-    }));
+    setFormData(prev => {
+      const itemsExistentes = prev.items.filter(item =>
+        String(item.item || '').trim().length > 0 ||
+        String(item.descripcion || '').trim().length > 0 ||
+        Number(item.valorUnitario || 0) > 0 ||
+        Number(item.cantidad || 0) > 0
+      );
+      const baseId = Math.max(0, ...prev.items.map(i => i.id)) + 1;
+      return {
+        ...prev,
+        items: [
+          ...itemsExistentes,
+          ...itemsBodega.map((item, index) => ({
+            id: baseId + index,
+            item: item.item || '',
+            cantidad: item.cantidad || 0,
+            descripcion: item.descripcion || '',
+            valorUnitario: item.valorUnitario || 0,
+            descuento: item.descuento || 0
+          }))
+        ]
+      };
+    });
   };
 
   const eliminarItem = (id) => {

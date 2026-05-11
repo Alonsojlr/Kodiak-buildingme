@@ -65,22 +65,36 @@ export const createOrdenCompra = async (orden, items) => {
 
   if (ordenError) throw ordenError
 
-  // Luego crear los items
-  if (items && items.length > 0) {
-    const itemsConOrdenId = items.map(item => ({
-      orden_id: ordenData[0].id,
-      item: item.item || '',
-      cantidad: item.cantidad,
-      descripcion: item.descripcion,
-      valor_unitario: item.valorUnitario || item.valor_unitario,
-      descuento: item.descuento || 0
+  const ordenId = ordenData[0].id
+
+  // Filtrar items vacíos y normalizar campos antes de insertar
+  const itemsValidos = (items || []).filter(item => {
+    const nombre = String(item.item || '').trim()
+    const descripcion = String(item.descripcion || '').trim()
+    const valorUnitario = Number(item.valorUnitario ?? item.valor_unitario ?? 0)
+    const cantidad = Number(item.cantidad ?? 0)
+    return nombre.length > 0 || descripcion.length > 0 || valorUnitario > 0 || cantidad > 0
+  })
+
+  if (itemsValidos.length > 0) {
+    const itemsConOrdenId = itemsValidos.map(item => ({
+      orden_id: ordenId,
+      item: String(item.item || '').trim(),
+      cantidad: Number(item.cantidad ?? 0),
+      descripcion: String(item.descripcion || '').trim(),
+      valor_unitario: Number(item.valorUnitario ?? item.valor_unitario ?? 0),
+      descuento: Number(item.descuento ?? 0)
     }))
 
     const { error: itemsError } = await supabase
       .from('ordenes_compra_items')
       .insert(itemsConOrdenId)
 
-    if (itemsError) throw itemsError
+    if (itemsError) {
+      // Intentar eliminar la OC huérfana para no dejar datos inconsistentes
+      await supabase.from('ordenes_compra').delete().eq('id', ordenId)
+      throw new Error(`Error al guardar los items de la OC: ${itemsError.message}`)
+    }
   }
 
   return ordenData[0]
