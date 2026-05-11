@@ -6993,7 +6993,7 @@ const ProtocolosModule = ({
 
                 await createOrdenCompra(ocData, nuevaOC.items || []);
                 const ordenesActualizadas = await getOrdenesCompra();
-                setSharedOrdenesCompra(ordenesActualizadas.map(mapOrdenCompra));
+                setSharedOrdenesCompra(ordenesActualizadas.map(o => mapOrdenCompra(o)));
 
                 setMostrarFormularioOC(false);
                 setDatosPreOC(null);
