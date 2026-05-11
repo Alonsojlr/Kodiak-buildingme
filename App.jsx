@@ -3153,7 +3153,8 @@ const OrdenesCompraModule = ({
         getProveedores()
       ]);
       const ordenIds = (data || []).map(o => o.id).filter(Boolean);
-      const facturasData = ordenIds.length > 0 ? await getOrdenCompraFacturas(ordenIds) : [];
+      let facturasData = [];
+      try { facturasData = ordenIds.length > 0 ? await getOrdenCompraFacturas(ordenIds) : []; } catch (_) {}
       const facturasByOrden = facturasData.reduce((acc, f) => {
         if (!acc[f.orden_id]) acc[f.orden_id] = [];
         acc[f.orden_id].push(f);
@@ -6946,7 +6947,15 @@ const ProtocolosModule = ({
     const proveedoresById = new Map(
       (proveedoresData || []).map((p) => [String(p.id), p])
     );
-    setSharedOrdenesCompra(ordenesActualizadas.map((o) => mapOrdenCompra(o, proveedoresById)));
+    const ordenIds = ordenesActualizadas.map(o => o.id).filter(Boolean);
+    let facturasOC = [];
+    try { facturasOC = ordenIds.length > 0 ? await getOrdenCompraFacturas(ordenIds) : []; } catch (_) {}
+    const facturasByOrden = facturasOC.reduce((acc, f) => {
+      if (!acc[f.orden_id]) acc[f.orden_id] = [];
+      acc[f.orden_id].push({ id: f.id, tipoDocumento: f.tipo_documento || 'Factura', numero: f.numero || '', fecha: f.fecha || '', monto: parseFloat(f.monto) || 0, estadoPago: f.estado_pago || 'Pendiente' });
+      return acc;
+    }, {});
+    setSharedOrdenesCompra(ordenesActualizadas.map((o) => ({ ...mapOrdenCompra(o, proveedoresById), facturas: facturasByOrden[o.id] || [] })));
   };
 
   useEffect(() => {
@@ -7156,8 +7165,7 @@ const ProtocolosModule = ({
                 };
 
                 await createOrdenCompra(ocData, nuevaOC.items || []);
-                const ordenesActualizadas = await getOrdenesCompra();
-                setSharedOrdenesCompra(ordenesActualizadas.map(o => mapOrdenCompra(o)));
+                await refrescarOrdenesCompra();
 
                 setMostrarFormularioOC(false);
                 setDatosPreOC(null);
@@ -14126,7 +14134,8 @@ const Dashboard = ({ user, onLogout }) => {
         valorUnitario: parseFloat(item.valor_unitario) || 0,
         valor_unitario: parseFloat(item.valor_unitario) || 0,
         descuento: parseFloat(item.descuento || 0)
-      }))
+      })),
+      facturas: []
     });
 
     const loadSharedData = async () => {
@@ -14176,9 +14185,18 @@ const Dashboard = ({ user, onLogout }) => {
             })])
         );
 
+        const ordenIds = ocData.map(o => o.id).filter(Boolean);
+        let facturasOC = [];
+        try { facturasOC = ordenIds.length > 0 ? await getOrdenCompraFacturas(ordenIds) : []; } catch (_) {}
+        const facturasByOrdenOC = facturasOC.reduce((acc, f) => {
+          if (!acc[f.orden_id]) acc[f.orden_id] = [];
+          acc[f.orden_id].push({ id: f.id, tipoDocumento: f.tipo_documento || 'Factura', numero: f.numero || '', fecha: f.fecha || '', monto: parseFloat(f.monto) || 0, estadoPago: f.estado_pago || 'Pendiente' });
+          return acc;
+        }, {});
+
         setSharedCotizaciones(cotData.map(mapCotizacion));
         setSharedProtocolos(protData.map((p) => mapProtocolo(p, cotizacionesByNumero, cotizacionesByFolio)));
-        setSharedOrdenesCompra(ocData.map((o) => mapOrdenCompra(o, proveedoresById)));
+        setSharedOrdenesCompra(ocData.map((o) => ({ ...mapOrdenCompra(o, proveedoresById), facturas: facturasByOrdenOC[o.id] || [] })));
       } catch (error) {
         console.error('Error cargando datos del dashboard:', error);
       }
