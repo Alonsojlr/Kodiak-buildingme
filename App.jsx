@@ -508,7 +508,7 @@ const LoginPage = ({ onLogin }) => {
 };
 
 // Componente de Módulo de Inventario/Bodega
-const InventarioModule = ({ activeModule }) => {
+const InventarioModule = ({ activeModule, sharedProtocolos = [] }) => {
   const [showNewModal, setShowNewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showFichaModal, setShowFichaModal] = useState(false);
@@ -870,11 +870,21 @@ const InventarioModule = ({ activeModule }) => {
                       <p className="text-xs font-semibold text-yellow-800 mb-1">
                         📅 {item.reservas.filter(r => !r.devuelto).length} Reservas Activas
                       </p>
-                      {item.reservas.filter(r => !r.devuelto).slice(0, 2).map(r => (
-                        <p key={r.id} className="text-xs text-yellow-700">
-                          Prot. {r.protocolo}: {r.cantidad} und ({r.fechaDesde} - {r.fechaHasta})
-                        </p>
-                      ))}
+                      {item.reservas.filter(r => !r.devuelto).slice(0, 2).map(r => {
+                        const prot = sharedProtocolos.find(p => String(p.folio) === String(r.protocolo));
+                        return (
+                          <div key={r.id} className="mb-1">
+                            <p className="text-xs text-yellow-700">
+                              Prot. {r.protocolo}: {r.cantidad} und ({r.fechaDesde} - {r.fechaHasta})
+                            </p>
+                            {prot?.nombreProyecto && (
+                              <p className="text-xs text-yellow-600 font-medium pl-2">
+                                {prot.nombreProyecto}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -993,8 +1003,9 @@ const InventarioModule = ({ activeModule }) => {
       )}
 
       {showFichaModal && itemSeleccionado && (
-        <FichaItemModal 
+        <FichaItemModal
           item={itemSeleccionado}
+          sharedProtocolos={sharedProtocolos}
           onClose={() => {
             setShowFichaModal(false);
             setItemSeleccionado(null);
@@ -1236,7 +1247,7 @@ const NuevoItemModal = ({ onClose, onSave, mode = 'create', initialData = null }
 };
 
 // Modal Ficha Completa del Item
-const FichaItemModal = ({ item: itemInicial, onClose, onCrearReserva, onMarcarDevuelto, onEliminarReserva }) => {
+const FichaItemModal = ({ item: itemInicial, onClose, onCrearReserva, onMarcarDevuelto, onEliminarReserva, sharedProtocolos = [] }) => {
   const [item, setItem] = useState({ ...itemInicial, reservas: itemInicial.reservas || [] });
   const [showReservaModal, setShowReservaModal] = useState(false);
 
@@ -1389,9 +1400,16 @@ const FichaItemModal = ({ item: itemInicial, onClose, onCrearReserva, onMarcarDe
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
-                        {reservas.map((reserva) => (
+                        {reservas.map((reserva) => {
+                          const prot = sharedProtocolos.find(p => String(p.folio) === String(reserva.protocolo));
+                          return (
                           <tr key={reserva.id} className={reserva.devuelto ? 'opacity-50' : ''}>
-                            <td className="px-3 py-3 font-mono">{reserva.protocolo}</td>
+                            <td className="px-3 py-3">
+                              <span className="font-mono font-semibold">{reserva.protocolo}</span>
+                              {prot?.nombreProyecto && (
+                                <p className="text-xs text-gray-500 mt-0.5">{prot.nombreProyecto}</p>
+                              )}
+                            </td>
                             <td className="px-3 py-3 font-semibold">{reserva.cantidad}</td>
                             <td className="px-3 py-3">{reserva.fechaDesde}</td>
                             <td className="px-3 py-3">{reserva.fechaHasta}</td>
@@ -1429,7 +1447,7 @@ const FichaItemModal = ({ item: itemInicial, onClose, onCrearReserva, onMarcarDe
                               </div>
                             </td>
                           </tr>
-                        ))}
+                        ); })}
                       </tbody>
                     </table>
                   </div>
@@ -1611,7 +1629,8 @@ const BodegaItemsModal = ({ codigoProtocolo, onClose, onAgregarItems }) => {
           item: item.nombre,
           descripcion: item.descripcion,
           cantidad: 0,
-          valorUnitario: parseFloat(item.precio_costo) || 0,
+          valorUnitario: 0,
+          precioCostoRef: parseFloat(item.precio_costo) || 0,
           descuento: 0
         }
       ];
@@ -1726,7 +1745,12 @@ const BodegaItemsModal = ({ codigoProtocolo, onClose, onAgregarItems }) => {
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-semibold text-gray-600 mb-1">V. Unitario</label>
+                          <label className="block text-xs font-semibold text-gray-600 mb-1">
+                            V. Unitario OC
+                            {seleccionado.precioCostoRef > 0 && (
+                              <span className="ml-1 text-gray-400 font-normal">(costo: ${seleccionado.precioCostoRef.toLocaleString('es-CL')})</span>
+                            )}
+                          </label>
                           <input
                             type="number"
                             min="0"
@@ -14498,7 +14522,7 @@ const Dashboard = ({ user, onLogout }) => {
           )}
 
           {/* Módulo de Inventario/Bodega */}
-          <InventarioModule activeModule={activeModule} />
+          <InventarioModule activeModule={activeModule} sharedProtocolos={sharedProtocolos} />
 
           {/* Módulo de Informes */}
           <InformesModule
