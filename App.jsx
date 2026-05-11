@@ -585,7 +585,12 @@ const InventarioModule = ({ activeModule, sharedProtocolos = [] }) => {
   if (activeModule !== 'inventario') return null;
 
   const calcularStockDisponible = (item, fecha = null) => {
-    const reservasActivas = (item.reservas || []).filter(r => !r.devuelto);
+    const checkDate = fecha || new Date().toISOString().split('T')[0];
+    const reservasActivas = (item.reservas || []).filter(r =>
+      !r.devuelto &&
+      r.fechaDesde && r.fechaHasta &&
+      r.fechaDesde <= checkDate && r.fechaHasta >= checkDate
+    );
     const stockReservado = reservasActivas.reduce((sum, r) => sum + r.cantidad, 0);
     return item.stockTotal - stockReservado;
   };
@@ -625,7 +630,10 @@ const InventarioModule = ({ activeModule, sharedProtocolos = [] }) => {
     totalItems: items.length,
     totalmenteReservados: items.filter(i => calcularStockDisponible(i) === 0).length,
     valorTotal: items.reduce((sum, i) => sum + (i.stockTotal * i.precioCosto), 0),
-    reservasActivas: items.reduce((sum, i) => sum + i.reservas.filter(r => !r.devuelto).length, 0),
+    reservasActivas: items.reduce((sum, i) => sum + i.reservas.filter(r =>
+      !r.devuelto && r.fechaDesde && r.fechaHasta &&
+      r.fechaDesde <= hoyISO && r.fechaHasta >= hoyISO
+    ).length, 0),
     reservasVencidas: items.reduce((sum, i) => sum + i.reservas.filter(isReservaVencida).length, 0)
   };
   const cardImageHeight = Math.max(220, Math.min(340, Math.round(cardMinWidth * 0.78)));
@@ -865,28 +873,54 @@ const InventarioModule = ({ activeModule, sharedProtocolos = [] }) => {
                   </div>
 
                   {/* Reservas */}
-                  {item.reservas.filter(r => !r.devuelto).length > 0 && (
-                    <div className="mb-4 p-3 bg-yellow-50 rounded-lg">
-                      <p className="text-xs font-semibold text-yellow-800 mb-1">
-                        📅 {item.reservas.filter(r => !r.devuelto).length} Reservas Activas
-                      </p>
-                      {item.reservas.filter(r => !r.devuelto).slice(0, 2).map(r => {
-                        const prot = sharedProtocolos.find(p => String(p.folio) === String(r.protocolo));
-                        return (
-                          <div key={r.id} className="mb-1">
-                            <p className="text-xs text-yellow-700">
-                              Prot. {r.protocolo}: {r.cantidad} und ({r.fechaDesde} - {r.fechaHasta})
+                  {(() => {
+                    const enUso = item.reservas.filter(r => !r.devuelto && r.fechaDesde <= hoyISO && r.fechaHasta >= hoyISO);
+                    const proximas = item.reservas.filter(r => !r.devuelto && r.fechaDesde > hoyISO);
+                    return (
+                      <>
+                        {enUso.length > 0 && (
+                          <div className="mb-2 p-3 bg-orange-50 rounded-lg">
+                            <p className="text-xs font-semibold text-orange-800 mb-1">
+                              🔴 {enUso.length} En uso hoy
                             </p>
-                            {prot?.nombreProyecto && (
-                              <p className="text-xs text-yellow-600 font-medium pl-2">
-                                {prot.nombreProyecto}
-                              </p>
-                            )}
+                            {enUso.slice(0, 2).map(r => {
+                              const prot = sharedProtocolos.find(p => String(p.folio) === String(r.protocolo));
+                              return (
+                                <div key={r.id} className="mb-1">
+                                  <p className="text-xs text-orange-700">
+                                    Prot. {r.protocolo}: {r.cantidad} und ({r.fechaDesde} - {r.fechaHasta})
+                                  </p>
+                                  {prot?.nombreProyecto && (
+                                    <p className="text-xs text-orange-600 font-medium pl-2">{prot.nombreProyecto}</p>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                        )}
+                        {proximas.length > 0 && (
+                          <div className="mb-2 p-3 bg-blue-50 rounded-lg">
+                            <p className="text-xs font-semibold text-blue-800 mb-1">
+                              📅 {proximas.length} Próxima{proximas.length > 1 ? 's' : ''} reserva{proximas.length > 1 ? 's' : ''}
+                            </p>
+                            {proximas.slice(0, 2).map(r => {
+                              const prot = sharedProtocolos.find(p => String(p.folio) === String(r.protocolo));
+                              return (
+                                <div key={r.id} className="mb-1">
+                                  <p className="text-xs text-blue-700">
+                                    Prot. {r.protocolo}: {r.cantidad} und ({r.fechaDesde} - {r.fechaHasta})
+                                  </p>
+                                  {prot?.nombreProyecto && (
+                                    <p className="text-xs text-blue-600 font-medium pl-2">{prot.nombreProyecto}</p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
 
                   {/* Ubicación */}
                   <div className="mb-4 text-sm text-gray-600">
@@ -1256,7 +1290,12 @@ const FichaItemModal = ({ item: itemInicial, onClose, onCrearReserva, onMarcarDe
   }, [itemInicial]);
 
   const calcularStockDisponible = () => {
-    const reservasActivas = (item.reservas || []).filter(r => !r.devuelto);
+    const checkDate = new Date().toISOString().split('T')[0];
+    const reservasActivas = (item.reservas || []).filter(r =>
+      !r.devuelto &&
+      r.fechaDesde && r.fechaHasta &&
+      r.fechaDesde <= checkDate && r.fechaHasta >= checkDate
+    );
     const stockReservado = reservasActivas.reduce((sum, r) => sum + r.cantidad, 0);
     return item.stockTotal - stockReservado;
   };
@@ -1422,8 +1461,12 @@ const FichaItemModal = ({ item: itemInicial, onClose, onCrearReserva, onMarcarDe
                                 <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-semibold">
                                   Vencida
                                 </span>
+                              ) : reserva.fechaDesde > hoyISO ? (
+                                <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-semibold">
+                                  Próxima
+                                </span>
                               ) : (
-                                <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs font-semibold">
+                                <span className="px-2 py-1 bg-orange-100 text-orange-800 rounded text-xs font-semibold">
                                   En uso
                                 </span>
                               )}
@@ -1503,7 +1546,13 @@ const ReservaModal = ({ item, onClose, onSave }) => {
   });
 
   const calcularDisponible = () => {
-    const reservasActivas = (item.reservas || []).filter(r => !r.devuelto);
+    const checkDesde = formData.fechaDesde || new Date().toISOString().split('T')[0];
+    const checkHasta = formData.fechaHasta || checkDesde;
+    const reservasActivas = (item.reservas || []).filter(r =>
+      !r.devuelto &&
+      r.fechaDesde && r.fechaHasta &&
+      r.fechaDesde <= checkHasta && r.fechaHasta >= checkDesde
+    );
     const stockReservado = reservasActivas.reduce((sum, r) => sum + r.cantidad, 0);
     return item.stockTotal - stockReservado;
   };
@@ -1610,8 +1659,15 @@ const BodegaItemsModal = ({ codigoProtocolo, onClose, onAgregarItems }) => {
   }, []);
 
   const disponiblePorItem = (itemId, stockTotal) => {
+    const checkDesde = fechaDesde || new Date().toISOString().split('T')[0];
+    const checkHasta = fechaHasta || checkDesde;
     const reservadas = reservas
-      .filter(r => r.item_id === itemId && !r.devuelto)
+      .filter(r =>
+        r.item_id === itemId &&
+        !r.devuelto &&
+        r.fecha_desde && r.fecha_hasta &&
+        r.fecha_desde <= checkHasta && r.fecha_hasta >= checkDesde
+      )
       .reduce((sum, r) => sum + (r.cantidad || 0), 0);
     return Math.max(0, (stockTotal || 0) - reservadas);
   };
