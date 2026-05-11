@@ -576,10 +576,23 @@ const InventarioModule = ({ activeModule, sharedProtocolos = [] }) => {
   };
 
   useEffect(() => {
-    let facturasByProtocolo = {};
     if (activeModule === 'inventario') {
       loadItems();
     }
+  }, [activeModule]);
+
+  useEffect(() => {
+    if (activeModule !== 'inventario') return;
+    const channel = supabase
+      .channel('inventario-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventario_items' }, () => {
+        loadItems();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'inventario_reservas' }, () => {
+        loadItems();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, [activeModule]);
 
   if (activeModule !== 'inventario') return null;
@@ -3106,6 +3119,19 @@ const OrdenesCompraModule = ({
 
   useEffect(() => {
     loadOrdenes();
+  }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('ordenes-compra-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes_compra' }, () => {
+        loadOrdenes();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes_compra_items' }, () => {
+        loadOrdenes();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   useEffect(() => {
@@ -6471,6 +6497,16 @@ const ProtocolosModule = ({
 
   useEffect(() => {
     loadProtocolos();
+  }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('protocolos-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'protocolos' }, () => {
+        loadProtocolos();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   useEffect(() => {
@@ -11650,6 +11686,16 @@ const [showNewModal, setShowNewModal] = useState(false);
 // Cargar cotizaciones desde Supabase
   useEffect(() => {
     loadCotizaciones();
+  }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('cotizaciones-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cotizaciones' }, () => {
+        loadCotizaciones();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   const loadCotizaciones = async () => {
