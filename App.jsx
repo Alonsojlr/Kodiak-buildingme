@@ -3139,6 +3139,10 @@ const OrdenesCompraModule = ({
 
   useEffect(() => {
     setOrdenes(sharedOrdenesCompra);
+    if (ordenSeleccionada) {
+      const updated = sharedOrdenesCompra.find(o => o.id === ordenSeleccionada.id);
+      if (updated) setOrdenSeleccionada(updated);
+    }
   }, [sharedOrdenesCompra]);
 
   const loadOrdenes = async () => {
@@ -3513,7 +3517,16 @@ const OrdenesCompraModule = ({
                     </>
                   )}
                   <td className="px-6 py-4">
-                    {orden.numeroFactura ? (
+                    {(orden.facturas && orden.facturas.length > 0) ? (
+                      <div className="space-y-1">
+                        {orden.facturas.map(f => (
+                          <div key={f.id}>
+                            <p className="font-medium text-green-600 text-xs">{f.tipoDocumento} {f.numero}</p>
+                            <p className="text-xs text-gray-500">{f.fecha}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : orden.numeroFactura ? (
                       <div>
                         <p className="font-medium text-green-600">{orden.numeroFactura}</p>
                         <p className="text-xs text-gray-500">{orden.fechaFactura}</p>
@@ -3771,20 +3784,12 @@ const OrdenesCompraModule = ({
           onSaveFactura={async (ordenActualizada) => {
             try {
               await updateOrdenCompra(ordenActualizada.id, {
-                numero_factura: ordenActualizada.numeroFactura || '',
-                fecha_factura: ordenActualizada.fechaFactura || null,
-                subtotal: ordenActualizada.subtotal || 0,
-                iva: ordenActualizada.iva || 0,
-                total: ordenActualizada.total || 0,
                 estado: ordenActualizada.estado || 'Facturada',
-                estado_pago: ordenActualizada.estadoPago || 'Pendiente',
-                fecha_pago: ordenActualizada.fechaPago || null
+                estado_pago: ordenActualizada.estadoPago || 'Pendiente'
               });
               await loadOrdenes();
-              setOrdenSeleccionada(ordenActualizada);
             } catch (error) {
-              console.error('Error actualizando factura:', error);
-              alert('Error al guardar la factura');
+              console.error('Error actualizando estado OC:', error);
             }
           }}
           onSavePago={async (ordenActualizada) => {
@@ -8854,7 +8859,16 @@ const VistaDetalleProtocolo = ({
                       </>
                     )}
                     <td className="px-4 py-3">
-                      {oc.numeroFactura ? (
+                      {(oc.facturas && oc.facturas.length > 0) ? (
+                        <div className="space-y-1">
+                          {oc.facturas.map(f => (
+                            <div key={f.id}>
+                              <p className="font-medium text-green-600 text-xs">{f.tipoDocumento} {f.numero}</p>
+                              <p className="text-xs text-gray-500">{f.fecha}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : oc.numeroFactura ? (
                         <div>
                           <p className="font-medium text-green-600">{oc.numeroFactura}</p>
                           <p className="text-xs text-gray-500">{oc.fechaFactura || ''}</p>
