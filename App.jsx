@@ -11,7 +11,7 @@ import {
   updateProtocoloFactura,
   deleteProtocoloFactura
 } from './src/api/protocolos';
-import { getOrdenesCompra, getOrdenCompraById, createOrdenCompra, updateOrdenCompra, replaceOrdenCompraItems, deleteOrdenCompra } from './src/api/ordenes-compra';
+import { getOrdenesCompra, getOrdenCompraById, createOrdenCompra, updateOrdenCompra, replaceOrdenCompraItems, deleteOrdenCompra, getOrdenCompraFacturas, createOrdenCompraFactura, deleteOrdenCompraFactura, updateOrdenCompraFactura } from './src/api/ordenes-compra';
 import { getClientes, createCliente, updateCliente, deleteCliente, getContactosByCliente, createContacto, updateContacto, deleteContacto, getAllContactos } from './src/api/clientes';
 import { getProveedores, createProveedor, updateProveedor, deleteProveedor } from './src/api/proveedores';
 import { autenticarUsuario, cerrarSesion, obtenerSesionActual, getUsuarios, createUsuario, updateUsuario, deleteUsuario } from './src/api/usuarios';
@@ -3130,6 +3130,9 @@ const OrdenesCompraModule = ({
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes_compra_items' }, () => {
         loadOrdenes();
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes_compra_facturas' }, () => {
+        loadOrdenes();
+      })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
@@ -3145,6 +3148,13 @@ const OrdenesCompraModule = ({
         getOrdenesCompra(),
         getProveedores()
       ]);
+      const ordenIds = (data || []).map(o => o.id).filter(Boolean);
+      const facturasData = ordenIds.length > 0 ? await getOrdenCompraFacturas(ordenIds) : [];
+      const facturasByOrden = facturasData.reduce((acc, f) => {
+        if (!acc[f.orden_id]) acc[f.orden_id] = [];
+        acc[f.orden_id].push(f);
+        return acc;
+      }, {});
       const proveedoresById = new Map(
         (proveedoresData || []).map((p) => [String(p.id), p])
       );
@@ -3207,6 +3217,14 @@ const OrdenesCompraModule = ({
           valorUnitario: parseFloat(item.valor_unitario) || 0,
           valor_unitario: parseFloat(item.valor_unitario) || 0,
           descuento: parseFloat(item.descuento || 0)
+        })),
+        facturas: (facturasByOrden[o.id] || []).map(f => ({
+          id: f.id,
+          tipoDocumento: f.tipo_documento || 'Factura',
+          numero: f.numero || '',
+          fecha: f.fecha || '',
+          monto: parseFloat(f.monto) || 0,
+          estadoPago: f.estado_pago || 'Pendiente'
         }))
       }));
 
@@ -3279,7 +3297,7 @@ const OrdenesCompraModule = ({
     recibidas: ordenes.filter(o => o.estado === 'Recibida').length,
     pagadas: ordenes.filter(o => o.estado === 'Pagada').length,
     montoTotal: ordenes.reduce((sum, o) => sum + o.total, 0),
-    sinFactura: ordenes.filter(o => !o.numeroFactura && o.estado !== 'Anulada').length,
+    sinFactura: ordenes.filter(o => (!o.facturas || o.facturas.length === 0) && !o.numeroFactura && o.estado !== 'Anulada').length,
     pendientesPago: ordenes.filter(o => o.estadoPago === 'Pendiente' && o.estado !== 'Anulada').length
   };
 
@@ -4623,6 +4641,7 @@ const NuevaOCModal = ({ onClose, onSave, currentUserName }) => {
 // Modal Detalle OC
 const DetalleOCModal = ({ orden: ordenInicial, onClose, onUpdate, onSave, onSaveFactura, onSavePago, startInEdit = false }) => {
   const [orden, setOrden] = useState(ordenInicial);
+  const [facturas, setFacturas] = useState(ordenInicial?.facturas || []);
   const [showFacturaModal, setShowFacturaModal] = useState(false);
   const [isEditing, setIsEditing] = useState(startInEdit);
   const [isSaving, setIsSaving] = useState(false);
@@ -4656,6 +4675,7 @@ const DetalleOCModal = ({ orden: ordenInicial, onClose, onUpdate, onSave, onSave
       ...ordenInicial,
       items: limpiarItems(ordenInicial.items || [])
     });
+    setFacturas(ordenInicial?.facturas || []);
     if (ordenInicial?.id !== prevOrdenIdRef.current) {
       setIsEditing(startInEdit);
       prevOrdenIdRef.current = ordenInicial?.id;
@@ -4691,17 +4711,55 @@ const DetalleOCModal = ({ orden: ordenInicial, onClose, onUpdate, onSave, onSave
     onUpdate(actualizada);
   };
 
-  const agregarFactura = ({ numeroFactura, fechaFactura }) => {
-    const actualizada = {
-      ...orden,
-      numeroFactura,
-      fechaFactura,
-      estado: 'Facturada'
-    };
-    setOrden(actualizada);
-    onUpdate(actualizada);
-    if (onSaveFactura) {
-      onSaveFactura(actualizada);
+  const agregarFactura = async ({ tipoDocumento, numero, fecha, monto }) => {
+    try {
+      const nueva = await createOrdenCompraFactura({
+        orden_id: orden.id,
+        tipo_documento: tipoDocumento,
+        numero,
+        fecha: fecha || null,
+        monto: monto || 0,
+        estado_pago: 'Pendiente'
+      });
+      const nuevaFactura = {
+        id: nueva.id,
+        tipoDocumento: nueva.tipo_documento,
+        numero: nueva.numero,
+        fecha: nueva.fecha || '',
+        monto: parseFloat(nueva.monto) || 0,
+        estadoPago: nueva.estado_pago || 'Pendiente'
+      };
+      setFacturas(prev => [...prev, nuevaFactura]);
+      if (orden.estado === 'Emitida' || orden.estado === 'Recibida') {
+        const actualizada = { ...orden, estado: 'Facturada' };
+        setOrden(actualizada);
+        onUpdate(actualizada);
+        if (onSaveFactura) onSaveFactura(actualizada);
+      }
+    } catch (error) {
+      console.error('Error guardando factura:', error);
+      alert('No se pudo guardar el documento');
+    }
+  };
+
+  const eliminarFactura = async (facturaId) => {
+    if (!window.confirm('¿Eliminar este documento?')) return;
+    try {
+      await deleteOrdenCompraFactura(facturaId);
+      setFacturas(prev => prev.filter(f => f.id !== facturaId));
+    } catch (error) {
+      console.error('Error eliminando factura:', error);
+      alert('No se pudo eliminar el documento');
+    }
+  };
+
+  const toggleFacturaPagada = async (factura) => {
+    const nuevoEstado = factura.estadoPago === 'Pagada' ? 'Pendiente' : 'Pagada';
+    try {
+      await updateOrdenCompraFactura(factura.id, { estado_pago: nuevoEstado });
+      setFacturas(prev => prev.map(f => f.id === factura.id ? { ...f, estadoPago: nuevoEstado } : f));
+    } catch (error) {
+      console.error('Error actualizando factura:', error);
     }
   };
 
@@ -4939,18 +4997,9 @@ const DetalleOCModal = ({ orden: ordenInicial, onClose, onUpdate, onSave, onSave
             <button
               onClick={() => setShowFacturaModal(true)}
               className="px-4 py-2 bg-white text-[#235250] rounded-lg font-semibold hover:bg-gray-100 transition-colors"
-              disabled={orden.numeroFactura}
             >
-              {orden.numeroFactura ? `Documento: ${orden.numeroFactura}` : 'Asignar Documento'}
+              + Agregar Documento
             </button>
-            {orden.numeroFactura && orden.estadoPago === 'Pendiente' && (
-              <button
-                onClick={marcarPagada}
-                className="px-4 py-2 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-colors"
-              >
-                Marcar como Pagada
-              </button>
-            )}
             <select
               value={orden.estado}
               onChange={(e) => cambiarEstado(e.target.value)}
@@ -5115,6 +5164,53 @@ const DetalleOCModal = ({ orden: ordenInicial, onClose, onUpdate, onSave, onSave
               <p className="text-gray-600">Santiago - Chile</p>
             </div>
           </div>
+
+          {/* Documentos / Facturas */}
+          <div className="mt-6">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-lg font-bold text-gray-800">Documentos recibidos</h4>
+              <button
+                onClick={() => setShowFacturaModal(true)}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-white text-sm font-semibold"
+                style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
+              >
+                + Agregar
+              </button>
+            </div>
+            {facturas.length === 0 ? (
+              <div className="bg-gray-50 rounded-xl p-6 text-center text-gray-500 text-sm">
+                Sin documentos registrados
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {facturas.map(f => (
+                  <div key={f.id} className="bg-gray-50 rounded-xl p-4 flex items-center justify-between gap-4">
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-800">{f.tipoDocumento} N° {f.numero}</p>
+                      <p className="text-sm text-gray-500">{f.fecha} · {f.monto > 0 ? formatCurrency(f.monto) : 'Sin monto'}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-1 rounded text-xs font-semibold ${f.estadoPago === 'Pagada' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                        {f.estadoPago}
+                      </span>
+                      <button
+                        onClick={() => toggleFacturaPagada(f)}
+                        className={`px-3 py-1 rounded-lg text-xs font-semibold ${f.estadoPago === 'Pagada' ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-green-500 text-white hover:bg-green-600'}`}
+                      >
+                        {f.estadoPago === 'Pagada' ? 'Pendiente' : 'Marcar Pagada'}
+                      </button>
+                      <button
+                        onClick={() => eliminarFactura(f.id)}
+                        className="px-3 py-1 bg-red-100 text-red-700 rounded-lg text-xs font-semibold hover:bg-red-200"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="p-6 border-t border-gray-200 bg-gray-50 flex justify-end space-x-3">
@@ -5142,9 +5238,10 @@ const DetalleOCModal = ({ orden: ordenInicial, onClose, onUpdate, onSave, onSave
 
         {showFacturaModal && (
           <FacturaModal
+            totalOC={totales.total}
             onClose={() => setShowFacturaModal(false)}
-            onSave={(payload) => {
-              agregarFactura(payload);
+            onSave={async (payload) => {
+              await agregarFactura(payload);
               setShowFacturaModal(false);
             }}
           />
@@ -5170,17 +5267,18 @@ const DetalleOCModal = ({ orden: ordenInicial, onClose, onUpdate, onSave, onSave
   );
 };
 
-// Modal Factura
-const FacturaModal = ({ onClose, onSave }) => {
+// Modal Factura OC (soporta múltiples)
+const FacturaModal = ({ onClose, onSave, totalOC = 0 }) => {
   const [tipoDocumento, setTipoDocumento] = useState('Factura');
-  const [numeroFactura, setNumeroFactura] = useState('');
-  const [fechaFactura, setFechaFactura] = useState('');
+  const [numero, setNumero] = useState('');
+  const [fecha, setFecha] = useState('');
+  const [monto, setMonto] = useState(totalOC || '');
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
         <div className="p-6 border-b">
-          <h4 className="text-xl font-bold text-gray-800">Asignar Documento</h4>
+          <h4 className="text-xl font-bold text-gray-800">Agregar Documento</h4>
         </div>
         <div className="p-6 space-y-4">
           <div>
@@ -5201,8 +5299,8 @@ const FacturaModal = ({ onClose, onSave }) => {
             <label className="block text-sm font-semibold text-gray-700 mb-2">N° de Documento *</label>
             <input
               type="text"
-              value={numeroFactura}
-              onChange={(e) => setNumeroFactura(e.target.value)}
+              value={numero}
+              onChange={(e) => setNumero(e.target.value)}
               className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98]"
               placeholder="Ej: 12345"
             />
@@ -5211,9 +5309,20 @@ const FacturaModal = ({ onClose, onSave }) => {
             <label className="block text-sm font-semibold text-gray-700 mb-2">Fecha de Documento *</label>
             <input
               type="date"
-              value={fechaFactura}
-              onChange={(e) => setFechaFactura(e.target.value)}
+              value={fecha}
+              onChange={(e) => setFecha(e.target.value)}
               className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98]"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Monto del Documento</label>
+            <input
+              type="number"
+              min="0"
+              value={monto}
+              onChange={(e) => setMonto(e.target.value)}
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98]"
+              placeholder="Ej: 500000"
             />
           </div>
         </div>
@@ -5225,14 +5334,12 @@ const FacturaModal = ({ onClose, onSave }) => {
             Cancelar
           </button>
           <button
-            onClick={() => onSave({
-              numeroFactura: `${tipoDocumento} ${numeroFactura}`.trim(),
-              fechaFactura
-            })}
-            className="px-4 py-2 bg-[#45ad98] text-white rounded-lg font-semibold"
-            disabled={!numeroFactura || !fechaFactura}
+            onClick={() => onSave({ tipoDocumento, numero, fecha, monto: parseFloat(monto) || 0 })}
+            className="px-4 py-2 text-white rounded-lg font-semibold"
+            style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
+            disabled={!numero || !fecha}
           >
-            Guardar
+            Agregar
           </button>
         </div>
       </div>

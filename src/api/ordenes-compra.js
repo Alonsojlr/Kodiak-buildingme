@@ -208,3 +208,50 @@ export const deleteOrdenCompra = async (id) => {
     throw new Error('No se pudo eliminar la OC')
   }
 }
+
+// ===== Facturas de OC =====
+
+export const getOrdenCompraFacturas = async (ordenIds = []) => {
+  let query = supabase
+    .from('ordenes_compra_facturas')
+    .select('*')
+    .order('created_at', { ascending: true })
+
+  if (ordenIds.length > 0) {
+    query = query.in('orden_id', ordenIds)
+  }
+
+  const { data, error } = await query
+  if (error) throw error
+  return data || []
+}
+
+export const createOrdenCompraFactura = async (factura) => {
+  const { data, error } = await supabase
+    .from('ordenes_compra_facturas')
+    .insert([factura])
+    .select()
+
+  if (error) throw error
+  return data[0]
+}
+
+export const deleteOrdenCompraFactura = async (id) => {
+  const { error } = await supabase
+    .from('ordenes_compra_facturas')
+    .delete()
+    .eq('id', id)
+
+  if (error) throw error
+}
+
+export const updateOrdenCompraFactura = async (id, updates) => {
+  const { data, error } = await supabase
+    .from('ordenes_compra_facturas')
+    .update(updates)
+    .eq('id', id)
+    .select()
+
+  if (error) throw error
+  return data[0]
+}
