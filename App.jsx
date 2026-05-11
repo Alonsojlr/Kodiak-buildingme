@@ -12452,21 +12452,15 @@ const [showNewModal, setShowNewModal] = useState(false);
             }
             try {
               await updateCotizacion(cotizacionSeleccionada.id, updates);
-              if (cotizacionSeleccionada.adjudicada_a_protocolo) {
-                const protocolosActuales = await getProtocolos();
-                const protocoloRelacionado = protocolosActuales.find(p =>
-                  String(p.folio) === String(cotizacionSeleccionada.adjudicada_a_protocolo) ||
-                  String(p.numero_cotizacion) === String(cotizacionSeleccionada.numero)
-                );
-                if (protocoloRelacionado) {
-                  const netoActualizado = Number(updates.neto ?? updates.monto) || 0;
-                  await updateProtocolo(protocoloRelacionado.id, {
-                    nombre_proyecto: updates.nombre_proyecto,
-                    unidad_negocio: updates.unidad_negocio,
-                    monto_neto: netoActualizado,
-                    monto_total: netoActualizado * 1.19
-                  });
-                }
+              const protocolosActuales = await getProtocolos();
+              const protocoloRelacionado = protocolosActuales.find(p =>
+                (cotizacionSeleccionada.adjudicada_a_protocolo && String(p.folio) === String(cotizacionSeleccionada.adjudicada_a_protocolo)) ||
+                String(p.numero_cotizacion) === String(cotizacionSeleccionada.numero)
+              );
+              if (protocoloRelacionado && updates.nombre_proyecto) {
+                await updateProtocolo(protocoloRelacionado.id, {
+                  nombre_proyecto: updates.nombre_proyecto,
+                });
               }
               await loadCotizaciones();
               setShowEditModal(false);
