@@ -8845,9 +8845,16 @@ const VistaDetalleProtocolo = ({
             </thead>
             <tbody className="divide-y divide-gray-200">
                 {ocVinculadas.map((oc) => {
-                  const neto = oc.subtotal || (oc.total ? oc.total / 1.19 : 0);
-                  const iva = oc.iva || (oc.total ? oc.total - neto : neto * 0.19);
-                  const total = oc.total || neto + iva;
+                  const subtotalItems = (oc.items || []).reduce((sum, item) => {
+                    const valorUnitario = item.valorUnitario ?? item.valor_unitario ?? 0;
+                    const cantidad = item.cantidad || 0;
+                    const descuento = item.descuento || 0;
+                    const s = cantidad * valorUnitario;
+                    return sum + (s - s * (descuento / 100));
+                  }, 0);
+                  const neto = subtotalItems > 0 ? subtotalItems : (oc.subtotal || (oc.total ? oc.total / 1.19 : 0));
+                  const iva = Math.round(neto * 0.19);
+                  const total = neto + iva;
                   const estadoOC = oc.numeroFactura && !['Facturada', 'Pagada', 'Anulada'].includes(oc.estado)
                     ? 'Facturada'
                     : oc.estado;
@@ -12457,10 +12464,14 @@ const [showNewModal, setShowNewModal] = useState(false);
                 (cotizacionSeleccionada.adjudicada_a_protocolo && String(p.folio) === String(cotizacionSeleccionada.adjudicada_a_protocolo)) ||
                 String(p.numero_cotizacion) === String(cotizacionSeleccionada.numero)
               );
-              if (protocoloRelacionado && updates.nombre_proyecto) {
-                await updateProtocolo(protocoloRelacionado.id, {
-                  nombre_proyecto: updates.nombre_proyecto,
-                });
+              if (protocoloRelacionado) {
+                const protocoloUpdates = {};
+                if (updates.nombre_proyecto) protocoloUpdates.nombre_proyecto = updates.nombre_proyecto;
+                if (updates.unidad_negocio) protocoloUpdates.unidad_negocio = updates.unidad_negocio;
+                const netoActualizado = Number(updates.neto ?? updates.monto) || 0;
+                protocoloUpdates.monto_neto = netoActualizado;
+                protocoloUpdates.monto_total = netoActualizado * 1.19;
+                await updateProtocolo(protocoloRelacionado.id, protocoloUpdates);
               }
               await loadCotizaciones();
               setShowEditModal(false);
