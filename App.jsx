@@ -11207,8 +11207,8 @@ const HistorialClienteModal = ({ cliente, onClose }) => {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl">
-        <div className="p-6 border-b border-gray-200" style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+        <div className="p-6 border-b border-gray-200 flex-shrink-0" style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}>
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-2xl font-bold text-white">Historial de Cotizaciones</h3>
@@ -11220,7 +11220,7 @@ const HistorialClienteModal = ({ cliente, onClose }) => {
           </div>
         </div>
 
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto flex-1">
           {loading ? (
             <div className="text-center py-12">
               <p className="text-gray-500">Cargando historial...</p>
