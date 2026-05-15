@@ -7254,6 +7254,7 @@ const ProtocolosModule = ({
         <NuevoProtocoloModal
           onClose={() => setShowNewModal(false)}
           sharedCotizaciones={sharedCotizaciones}
+          sharedProtocolos={protocolos}
           onSave={async (nuevoProtocolo) => {
             try {
               // Obtener folios existentes
@@ -10052,7 +10053,7 @@ const FormularioOCDesdeProtocolo = ({ datosProtocolo, onClose, onGuardar, curren
 
 // Modal Nuevo Protocolo (mantener el existente o simplificado)
 // Modal Nuevo Protocolo (Adjudicar Venta)
-const NuevoProtocoloModal = ({ onClose, onSave, sharedCotizaciones }) => {
+const NuevoProtocoloModal = ({ onClose, onSave, sharedCotizaciones, sharedProtocolos = [] }) => {
   const [cotizaciones, setCotizaciones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedCotizacion, setSelectedCotizacion] = useState('');
@@ -10087,8 +10088,10 @@ const NuevoProtocoloModal = ({ onClose, onSave, sharedCotizaciones }) => {
     cargarCotizaciones();
   }, []);
 
-  const cotizacionesGanadas = cotizaciones.filter(c => 
-    c.estado === 'ganada' && !c.adjudicada_a_protocolo
+  const cotizacionesGanadas = cotizaciones.filter(c =>
+    c.estado === 'ganada' &&
+    !c.adjudicada_a_protocolo &&
+    !sharedProtocolos.some(p => String(p.numero_cotizacion) === String(c.numero))
   );
 
   const handleSubmit = (e) => {
