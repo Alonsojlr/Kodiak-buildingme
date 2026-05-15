@@ -14260,7 +14260,6 @@ const Dashboard = ({ user, onLogout }) => {
             sharedProtocolos={sharedProtocolos}
             sharedOrdenesCompra={sharedOrdenesCompra}
             sharedCotizaciones={sharedCotizaciones}
-            sharedClientes={sharedClientes}
           />
 
           {/* Módulo de Auditorías */}
