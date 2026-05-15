@@ -118,18 +118,18 @@ const TabResumen = ({ kpis, rentabilidadGlobal, porUnidad, metricas }) => {
             ? <p className="text-sm text-gray-400">Sin datos</p>
             : <div className="space-y-3">
                 {porUnidad.map(u => (
-                  <div key={u.unidad}>
-                    <div className="flex justify-between items-center text-xs mb-1.5">
-                      <span className="text-gray-600 font-medium truncate max-w-[45%]">{u.unidad}</span>
+                  <div key={u.unidad} className="space-y-1">
+                    <MiniBar value={u.ventaNeta} max={maxVenta} />
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-gray-700 font-medium">{u.unidad}</span>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="text-gray-500 text-[10px]">{u.proyectos} proy.</span>
+                        <span className="text-gray-400 text-[10px]">{u.proyectos} proy.</span>
                         <span className="font-semibold text-gray-700">{fmt(u.ventaNeta)}</span>
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${colorRent(u.rentabilidad)}`}>
                           {fmtPct(u.rentabilidad)}
                         </span>
                       </div>
                     </div>
-                    <MiniBar value={u.ventaNeta} max={maxVenta} />
                   </div>
                 ))}
               </div>
