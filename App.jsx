@@ -10091,7 +10091,7 @@ const NuevoProtocoloModal = ({ onClose, onSave, sharedCotizaciones, sharedProtoc
   const cotizacionesGanadas = cotizaciones.filter(c =>
     c.estado === 'ganada' &&
     !c.adjudicada_a_protocolo &&
-    !sharedProtocolos.some(p => String(p.numero_cotizacion) === String(c.numero))
+    !sharedProtocolos.some(p => String(p.numeroCotizacion) === String(c.numero))
   );
 
   const handleSubmit = (e) => {
