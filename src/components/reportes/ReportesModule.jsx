@@ -118,10 +118,10 @@ const TabResumen = ({ kpis, rentabilidadGlobal, porUnidad, metricas }) => {
             ? <p className="text-sm text-gray-400">Sin datos</p>
             : <div className="space-y-3">
                 {porUnidad.map(u => (
-                  <div key={u.unidad} className="space-y-1">
+                  <div key={u.unidadNegocio} className="space-y-1">
                     <MiniBar value={u.ventaNeta} max={maxVenta} />
                     <div className="flex justify-between items-center text-xs">
-                      <span className="text-gray-700 font-medium">{u.unidad}</span>
+                      <span className="text-gray-700 font-medium">{u.unidadNegocio}</span>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <span className="text-gray-400 text-[10px]">{u.proyectos} proy.</span>
                         <span className="font-semibold text-gray-700">{fmt(u.ventaNeta)}</span>
@@ -435,11 +435,10 @@ export const ReportesModule = ({
   }, [sharedProtocolos])
 
   const clientesOpts = useMemo(() => {
-    const map = {}
-    sharedProtocolos.forEach(p => { if (p.clienteId && p.cliente) map[p.clienteId] = p.cliente })
+    const nombres = Array.from(new Set(sharedProtocolos.map(p => p.cliente).filter(c => c && c !== 'Sin cliente'))).sort((a, b) => a.localeCompare(b))
     return [
       { id: 'todos', nombre: 'Todos los clientes' },
-      ...Object.entries(map).map(([id, nombre]) => ({ id, nombre })).sort((a, b) => a.nombre.localeCompare(b.nombre))
+      ...nombres.map(nombre => ({ id: nombre, nombre }))
     ]
   }, [sharedProtocolos])
 
@@ -452,7 +451,7 @@ export const ReportesModule = ({
   const protocolosFiltrados = useMemo(() =>
     sharedProtocolos.filter(p => {
       if (filtroUnidad  !== 'todas' && p.unidadNegocio !== filtroUnidad) return false
-      if (filtroCliente !== 'todos' && String(p.clienteId) !== filtroCliente) return false
+      if (filtroCliente !== 'todos' && p.cliente !== filtroCliente) return false
       if (filtroEstado  !== 'todos' && p.estado !== filtroEstado) return false
       if (filtroFechaDesde && p.fechaCreacion && p.fechaCreacion < filtroFechaDesde) return false
       if (filtroFechaHasta && p.fechaCreacion && p.fechaCreacion > filtroFechaHasta) return false
