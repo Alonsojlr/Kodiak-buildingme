@@ -3,9 +3,10 @@ import { getProtocolosFacturas } from '../../api/protocolos'
 import {
   BarChart3, TrendingUp, TrendingDown, DollarSign, FileText, Users, Building2,
   Download, Filter, ChevronDown, ChevronUp, Package, ArrowUpDown,
-  CheckCircle, Clock, RefreshCw, AlertCircle, LayoutDashboard
+  CheckCircle, Clock, RefreshCw, AlertCircle, LayoutDashboard, ShoppingCart
 } from 'lucide-react'
 import DashboardTab from './DashboardTab'
+import CostosTab from './CostosTab'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -588,11 +589,12 @@ export const ReportesModule = ({
   )
 
   const tabs = [
-    { id: 'dashboard', label: 'Dashboard',        icon: LayoutDashboard },
-    { id: 'resumen',   label: 'Resumen',         icon: BarChart3  },
-    { id: 'proyectos', label: 'Por Proyecto',     icon: FileText   },
-    { id: 'unidad',    label: 'Por Unidad',       icon: Building2  },
-    { id: 'clientes',  label: 'Por Cliente',      icon: Users      },
+    { id: 'dashboard', label: 'Dashboard',    icon: LayoutDashboard },
+    { id: 'costos',    label: 'Costos / OC',  icon: ShoppingCart    },
+    { id: 'resumen',   label: 'Resumen',      icon: BarChart3       },
+    { id: 'proyectos', label: 'Por Proyecto', icon: FileText        },
+    { id: 'unidad',    label: 'Por Unidad',   icon: Building2       },
+    { id: 'clientes',  label: 'Por Cliente',  icon: Users           },
   ]
 
   return (
@@ -690,6 +692,12 @@ export const ReportesModule = ({
           sharedOrdenesCompra={sharedOrdenesCompra}
           sharedProtocolos={sharedProtocolos}
           protocolosFacturas={protocolosFacturas}
+        />
+      )}
+      {activeTab === 'costos'    && (
+        <CostosTab
+          sharedOrdenesCompra={sharedOrdenesCompra}
+          sharedProtocolos={sharedProtocolos}
         />
       )}
       {activeTab === 'resumen'   && <TabResumen kpis={kpis} rentabilidadGlobal={rentabilidadGlobal} porUnidad={porUnidad} metricas={metricas} />}
