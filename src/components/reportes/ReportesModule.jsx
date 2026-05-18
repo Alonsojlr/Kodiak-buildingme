@@ -3,8 +3,9 @@ import { getProtocolosFacturas } from '../../api/protocolos'
 import {
   BarChart3, TrendingUp, TrendingDown, DollarSign, FileText, Users, Building2,
   Download, Filter, ChevronDown, ChevronUp, Package, ArrowUpDown,
-  CheckCircle, Clock, RefreshCw, AlertCircle
+  CheckCircle, Clock, RefreshCw, AlertCircle, LayoutDashboard
 } from 'lucide-react'
+import DashboardTab from './DashboardTab'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -397,7 +398,7 @@ export const ReportesModule = ({
 }) => {
   if (activeModule !== 'informes') return null
 
-  const [activeTab,          setActiveTab]          = useState('resumen')
+  const [activeTab,          setActiveTab]          = useState('dashboard')
   const [protocolosFacturas, setProtocolosFacturas] = useState([])
   const [loading,            setLoading]            = useState(true)
   const [showFilters,        setShowFilters]        = useState(true)
@@ -587,6 +588,7 @@ export const ReportesModule = ({
   )
 
   const tabs = [
+    { id: 'dashboard', label: 'Dashboard',        icon: LayoutDashboard },
     { id: 'resumen',   label: 'Resumen',         icon: BarChart3  },
     { id: 'proyectos', label: 'Por Proyecto',     icon: FileText   },
     { id: 'unidad',    label: 'Por Unidad',       icon: Building2  },
@@ -678,6 +680,18 @@ export const ReportesModule = ({
       </div>
 
       {/* Tab content */}
+      {activeTab === 'dashboard' && (
+        <DashboardTab
+          metricas={metricas}
+          kpis={kpis}
+          porUnidad={porUnidad}
+          porCliente={porCliente}
+          sharedCotizaciones={sharedCotizaciones}
+          sharedOrdenesCompra={sharedOrdenesCompra}
+          sharedProtocolos={sharedProtocolos}
+          protocolosFacturas={protocolosFacturas}
+        />
+      )}
       {activeTab === 'resumen'   && <TabResumen kpis={kpis} rentabilidadGlobal={rentabilidadGlobal} porUnidad={porUnidad} metricas={metricas} />}
       {activeTab === 'proyectos' && <TabProyectos metricas={metricasSorted} sortField={sortField} sortDir={sortDir} onSort={toggleSort} onExport={exportProyectos} />}
       {activeTab === 'unidad'    && <TabAgrupado rows={porUnidad}  groupKey="unidadNegocio" title="Unidad de Negocio" onExport={() => exportAgrupado(porUnidad,  'unidadNegocio', 'Unidad de Negocio')} />}
