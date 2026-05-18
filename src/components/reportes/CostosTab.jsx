@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react'
 import {
   Package, TrendingDown, DollarSign, CheckCircle, Clock,
-  AlertCircle, ShoppingCart, Building2, Tag, Layers, Users
+  AlertCircle, ShoppingCart, Building2, Tag, Layers, Users, FileText
 } from 'lucide-react'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
