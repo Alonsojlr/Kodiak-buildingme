@@ -13887,10 +13887,17 @@ const Dashboard = ({ user, onLogout }) => {
   }, [sharedCotizaciones, sharedProtocolos, sharedOrdenesCompra, selectedUnit]);
 
   const isAdminLike = ['admin', 'comercial'].includes(user.role);
+  const dashboardUserName = String(user?.name || '').toLowerCase();
+  const dashboardUserEmail = String(user?.email || '').toLowerCase();
+  const canAccessAdministracion = isAdminLike || (
+    user.role === 'compras' &&
+    (dashboardUserName.includes('joaquin') || dashboardUserEmail.includes('joaquin'))
+  );
 
   // Permisos por rol
   const hasAccess = (module) => {
     if (isAdminLike) return true;
+    if (module === 'administracion' && canAccessAdministracion) return true;
     if (user.role === 'compras' && ['protocolos', 'gantt', 'ordenes', 'proveedores', 'inventario', 'auditorias'].includes(module)) return true;
     if (user.role === 'finanzas' && ['cotizaciones', 'clientes', 'facturacion'].includes(module)) return true;
     if (['auditor', 'trade_marketing'].includes(user.role) && module === 'auditorias') return true;
@@ -13982,7 +13989,11 @@ const Dashboard = ({ user, onLogout }) => {
         <div className="px-8 py-3">
           <div className="flex items-center justify-center space-x-2 overflow-x-auto">
             {menuItems.map((item) => {
-              if (item.roles.includes('all') || item.roles.includes(user.role)) {
+              const canShowItem = item.roles.includes('all')
+                || item.roles.includes(user.role)
+                || (item.id === 'administracion' && canAccessAdministracion);
+
+              if (canShowItem) {
                 const Icon = item.icon;
                 return (
                   <button
@@ -14247,7 +14258,7 @@ const Dashboard = ({ user, onLogout }) => {
             <ClientesModule />
           )}
 
-          {activeModule === 'administracion' && isAdminLike && (
+          {activeModule === 'administracion' && canAccessAdministracion && (
             <AdministracionModule activeModule={activeModule} />
           )}
 
