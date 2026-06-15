@@ -44,6 +44,12 @@ const sanitizeStorageFileName = (name) =>
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-zA-Z0-9._-]/g, '_');
 
+const normalizePlainText = (value) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
 const formatRutInput = (value) => {
   const clean = String(value || '')
     .replace(/[^0-9kK]/g, '')
@@ -13888,8 +13894,8 @@ const Dashboard = ({ user, onLogout }) => {
   }, [sharedCotizaciones, sharedProtocolos, sharedOrdenesCompra, selectedUnit]);
 
   const isAdminLike = ['admin', 'comercial'].includes(user.role);
-  const dashboardUserName = String(user?.name || '').toLowerCase();
-  const dashboardUserEmail = String(user?.email || '').toLowerCase();
+  const dashboardUserName = normalizePlainText(user?.name);
+  const dashboardUserEmail = normalizePlainText(user?.email);
   const canAccessAdministracion = isAdminLike || (
     user.role === 'compras' &&
     (dashboardUserName.includes('joaquin') || dashboardUserEmail.includes('joaquin'))
