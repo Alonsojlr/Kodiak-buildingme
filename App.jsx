@@ -11530,6 +11530,14 @@ const [showNewModal, setShowNewModal] = useState(false);
   const cotizacionTieneOrdenCompra = (cot) => {
     const numeroCotizacion = normalizarNumero(cot?.numero);
     const folioProtocolo = cot?.adjudicada_a_protocolo ? String(cot.adjudicada_a_protocolo) : '';
+    const protocoloRelacionado = folioProtocolo
+      ? sharedProtocolos.find((p) => String(p.folio) === folioProtocolo)
+      : null;
+    const tieneOCCliente = Boolean(String(protocoloRelacionado?.ocCliente || '').trim());
+
+    if (tieneOCCliente) {
+      return true;
+    }
 
     return sharedOrdenesCompra.some((oc) => {
       const numeroCotizacionOC = normalizarNumero(oc?.numeroCotizacion || oc?.numero_cotizacion);
