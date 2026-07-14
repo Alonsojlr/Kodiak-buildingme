@@ -11282,7 +11282,14 @@ const HistorialClienteModal = ({ cliente, onClose }) => {
 };
 
 // Componente de Módulo de Cotizaciones
-const CotizacionesModule = ({ onAdjudicarVenta, setSharedCotizaciones = () => {}, sharedProtocolos = [], currentUserName, user }) => {
+const CotizacionesModule = ({
+  onAdjudicarVenta,
+  setSharedCotizaciones = () => {},
+  sharedProtocolos = [],
+  sharedOrdenesCompra = [],
+  currentUserName,
+  user
+}) => {
 const [showNewModal, setShowNewModal] = useState(false);
   const [showDetalleModal, setShowDetalleModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -11380,13 +11387,29 @@ const [showNewModal, setShowNewModal] = useState(false);
     montoTotal: cotizaciones.reduce((sum, c) => sum + c.monto, 0)
   };
 
+  const cotizacionTieneOrdenCompra = (cot) => {
+    const numeroCotizacion = normalizarNumero(cot?.numero);
+    const folioProtocolo = cot?.adjudicada_a_protocolo ? String(cot.adjudicada_a_protocolo) : '';
+
+    return sharedOrdenesCompra.some((oc) => {
+      const numeroCotizacionOC = normalizarNumero(oc?.numeroCotizacion || oc?.numero_cotizacion);
+      const codigoProtocoloOC = String(oc?.codigoProtocolo || oc?.codigo_protocolo || '');
+      return (
+        (numeroCotizacion && numeroCotizacionOC === numeroCotizacion) ||
+        (folioProtocolo && codigoProtocoloOC === folioProtocolo)
+      );
+    });
+  };
+
   // Filtrar cotizaciones
   const cotizacionesFiltradas = cotizaciones.filter(cot => {
     const searchLower = searchTerm.toLowerCase();
     const matchSearch = cot.numero.includes(searchTerm) || 
                        cot.cliente.toLowerCase().includes(searchLower) ||
                        String(cot.nombreProyecto || '').toLowerCase().includes(searchLower);
-    const matchEstado = filterEstado === 'todas' || cot.estado === filterEstado;
+    const matchEstado =
+      filterEstado === 'todas' ||
+      (filterEstado === 'sin_oc' ? !cotizacionTieneOrdenCompra(cot) : cot.estado === filterEstado);
     return matchSearch && matchEstado;
   });
 
@@ -11591,6 +11614,7 @@ const [showNewModal, setShowNewModal] = useState(false);
             <option value="ganada">Ganadas</option>
             <option value="perdida">Perdidas</option>
             <option value="standby">Standby</option>
+            <option value="sin_oc">Sin OC</option>
           </select>
         </div>
       </div>
@@ -13562,6 +13586,7 @@ const Dashboard = ({ user, onLogout }) => {
     const mapOrdenCompra = (o, proveedoresById = new Map()) => ({
       id: o.id,
       numero: o.numero,
+      numeroCotizacion: o.numero_cotizacion || '',
       codigoProtocolo: o.codigo_protocolo,
       fecha: o.fecha,
       proveedor:
@@ -14223,6 +14248,7 @@ const Dashboard = ({ user, onLogout }) => {
               sharedCotizaciones={sharedCotizaciones}
               setSharedCotizaciones={setSharedCotizaciones}
               sharedProtocolos={sharedProtocolos}
+              sharedOrdenesCompra={sharedOrdenesCompra}
               onAdjudicarVenta={handleAdjudicarVentaDesdeCotizacion}
               currentUserName={user?.name}
               user={user}
