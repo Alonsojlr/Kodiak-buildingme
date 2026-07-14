@@ -65,6 +65,41 @@ const formatRutInput = (value) => {
   return `${formattedBody}-${dv}`;
 };
 
+const INVENTARIO_FAMILIAS = ['Televisores', 'Sillas', 'Mesas', 'Electricos', 'Varios'];
+
+const getInventarioFamilia = (item) => {
+  const searchable = normalizePlainText([
+    item?.categoria,
+    item?.nombre,
+    item?.descripcion
+  ].filter(Boolean).join(' '));
+
+  if (searchable.includes('televisor') || searchable.includes(' tv ' ) || searchable.startsWith('tv ') || searchable.includes('pantalla')) {
+    return 'Televisores';
+  }
+  if (searchable.includes('silla') || searchable.includes('sitial') || searchable.includes('taburete') || searchable.includes('banqueta')) {
+    return 'Sillas';
+  }
+  if (searchable.includes('mesa') || searchable.includes('meson') || searchable.includes('meson')) {
+    return 'Mesas';
+  }
+  if (
+    searchable.includes('electric') ||
+    searchable.includes('cable') ||
+    searchable.includes('alargador') ||
+    searchable.includes('extension') ||
+    searchable.includes('enchufe') ||
+    searchable.includes('foco') ||
+    searchable.includes('luminaria')
+  ) {
+    return 'Electricos';
+  }
+  if (searchable.includes('vario')) {
+    return 'Varios';
+  }
+  return '';
+};
+
 const uploadProtocoloDocumentoPDF = async ({ protocoloId, tipo, file }) => {
   if (!protocoloId) throw new Error('Falta el ID del protocolo');
   if (!file) throw new Error('No se seleccionó archivo');
@@ -527,6 +562,7 @@ const InventarioModule = ({ activeModule, sharedProtocolos = [] }) => {
   const [itemsError, setItemsError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategoria, setFilterCategoria] = useState('todas');
+  const [filterFamilia, setFilterFamilia] = useState('todas');
   const [cardMinWidth, setCardMinWidth] = useState(280);
 
   const loadItems = async (selectedId = null) => {
@@ -622,7 +658,8 @@ const InventarioModule = ({ activeModule, sharedProtocolos = [] }) => {
                        (item.nombre || '').toLowerCase().includes(searchLower) ||
                        (item.descripcion || '').toLowerCase().includes(searchLower);
     const matchCategoria = filterCategoria === 'todas' || item.categoria === filterCategoria;
-    return matchSearch && matchCategoria;
+    const matchFamilia = filterFamilia === 'todas' || getInventarioFamilia(item) === filterFamilia;
+    return matchSearch && matchCategoria && matchFamilia;
   });
 
   const categorias = [...new Set(items.map(i => i.categoria).filter(Boolean))];
@@ -824,6 +861,42 @@ const InventarioModule = ({ activeModule, sharedProtocolos = [] }) => {
             onChange={(e) => setCardMinWidth(Number(e.target.value))}
             className="w-full accent-[#45ad98]"
           />
+        </div>
+        <div className="mt-5">
+          <p className="text-sm font-semibold text-gray-700 mb-3">Familia</p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setFilterFamilia('todas')}
+              className={`px-4 py-2 rounded-xl font-semibold shadow-sm transition-all ${
+                filterFamilia === 'todas'
+                  ? 'text-white shadow-md'
+                  : 'bg-white text-gray-700 border-2 border-gray-200 hover:border-[#45ad98] hover:text-[#235250]'
+              }`}
+              style={filterFamilia === 'todas'
+                ? { background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }
+                : {}}
+            >
+              Todas
+            </button>
+            {INVENTARIO_FAMILIAS.map((familia) => (
+              <button
+                key={familia}
+                type="button"
+                onClick={() => setFilterFamilia(familia)}
+                className={`px-4 py-2 rounded-xl font-semibold shadow-sm transition-all ${
+                  filterFamilia === familia
+                    ? 'text-white shadow-md'
+                    : 'bg-white text-gray-700 border-2 border-gray-200 hover:border-[#45ad98] hover:text-[#235250]'
+                }`}
+                style={filterFamilia === familia
+                  ? { background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }
+                  : {}}
+              >
+                {familia}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
