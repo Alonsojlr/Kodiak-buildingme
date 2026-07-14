@@ -13693,6 +13693,7 @@ const Dashboard = ({ user, onLogout }) => {
 
   useEffect(() => {
     let facturasByProtocolo = {};
+    let chatStatsByProtocolo = {};
     const mapCotizacion = (cot) => ({
       id: cot.id,
       numero: cot.numero,
@@ -13743,6 +13744,8 @@ const Dashboard = ({ user, onLogout }) => {
       fechaEntrega: p.fecha_entrega || null,
       montoTotal: parseFloat(p.monto_total) || 0,
       items: p.items || [],
+      chatMessagesCount: chatStatsByProtocolo[p.id]?.count || 0,
+      chatLastMessageAt: chatStatsByProtocolo[p.id]?.lastMessageAt || null,
       facturas: (() => {
         const facturas = facturasByProtocolo[p.id] || [];
         if (!facturas.length && (p.factura_bm || p.fecha_factura_bm)) {
@@ -13857,6 +13860,30 @@ const Dashboard = ({ user, onLogout }) => {
               monto: parseFloat(cot.monto) || 0
             })])
         );
+        const protocolosIds = protData.map((p) => p.id).filter(Boolean);
+        if (protocolosIds.length > 0) {
+          const { data: chatData, error: chatError } = await supabase
+            .from('protocolos_chat_mensajes')
+            .select('protocolo_id, created_at')
+            .in('protocolo_id', protocolosIds);
+
+          if (!chatError && Array.isArray(chatData)) {
+            chatData.forEach((row) => {
+              if (!row?.protocolo_id) return;
+              const prev = chatStatsByProtocolo[row.protocolo_id] || { count: 0, lastMessageAt: null };
+              const nextLast =
+                !prev.lastMessageAt || (row.created_at && new Date(row.created_at) > new Date(prev.lastMessageAt))
+                  ? row.created_at
+                  : prev.lastMessageAt;
+              chatStatsByProtocolo[row.protocolo_id] = {
+                count: prev.count + 1,
+                lastMessageAt: nextLast
+              };
+            });
+          } else if (chatError && chatError.code !== '42P01') {
+            console.error('Error cargando conteo global de chat de protocolos:', chatError);
+          }
+        }
 
         const ordenIds = ocData.map(o => o.id).filter(Boolean);
         let facturasOC = [];
