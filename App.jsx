@@ -5981,6 +5981,8 @@ const ProtocolosModule = ({
   sharedOrdenesCompra = [],
   setSharedOrdenesCompra = () => {},
   sharedCotizaciones = [],
+  chatReadState = {},
+  setChatReadState = () => {},
   protocoloParaAbrir,
   onAdjudicarCompra,
   onAdjudicarVentaDesdeCotizacion,
@@ -6013,8 +6015,6 @@ const ProtocolosModule = ({
   // Cargar protocolos desde Supabase
   const [protocolos, setProtocolos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const chatReadStorageKey = `protocolos.chatReadState.${String(user?.id || user?.email || 'anon').toLowerCase()}`;
-  const [chatReadState, setChatReadState] = useState({});
   const processedChatMessageIdsRef = useRef(new Set());
   const chatLastSyncAtRef = useRef(null);
 
@@ -6029,29 +6029,6 @@ const ProtocolosModule = ({
   useEffect(() => {
     protocoloSeleccionadoRef.current = protocoloSeleccionado;
   }, [protocoloSeleccionado]);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(chatReadStorageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setChatReadState(parsed && typeof parsed === 'object' ? parsed : {});
-      } else {
-        setChatReadState({});
-      }
-    } catch (error) {
-      console.error('Error cargando estado de lectura de chat:', error);
-      setChatReadState({});
-    }
-  }, [chatReadStorageKey]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(chatReadStorageKey, JSON.stringify(chatReadState));
-    } catch (error) {
-      console.error('Error guardando estado de lectura de chat:', error);
-    }
-  }, [chatReadStorageKey, chatReadState]);
 
   const markProtocoloChatAsRead = (protocoloId, totalCount = 0) => {
     if (!protocoloId) return;
@@ -13444,6 +13421,8 @@ const Dashboard = ({ user, onLogout }) => {
   const [sharedCotizaciones, setSharedCotizaciones] = useState([]);
   const [sharedProtocolos, setSharedProtocolos] = useState([]);
   const [sharedOrdenesCompra, setSharedOrdenesCompra] = useState([]);
+  const chatReadStorageKey = `protocolos.chatReadState.${String(user?.id || user?.email || 'anon').toLowerCase()}`;
+  const [sharedChatReadState, setSharedChatReadState] = useState({});
   const [datosPreOC, setDatosPreOC] = useState(null);
   const [protocoloParaAbrir, setProtocoloParaAbrir] = useState(null);
   const chatNotifyProcessedIdsRef = useRef(new Set());
@@ -13457,6 +13436,29 @@ const Dashboard = ({ user, onLogout }) => {
     });
     protocolosByIdRef.current = byId;
   }, [sharedProtocolos]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(chatReadStorageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setSharedChatReadState(parsed && typeof parsed === 'object' ? parsed : {});
+      } else {
+        setSharedChatReadState({});
+      }
+    } catch (error) {
+      console.error('Error cargando estado global de lectura de chat:', error);
+      setSharedChatReadState({});
+    }
+  }, [chatReadStorageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(chatReadStorageKey, JSON.stringify(sharedChatReadState));
+    } catch (error) {
+      console.error('Error guardando estado global de lectura de chat:', error);
+    }
+  }, [chatReadStorageKey, sharedChatReadState]);
 
   const registerProcessedChatNotify = (messageId) => {
     if (!messageId) return false;
@@ -13485,6 +13487,18 @@ const Dashboard = ({ user, onLogout }) => {
     if (registerProcessedChatNotify(mensaje.id)) return;
 
     updateChatNotifySync(mensaje.created_at || new Date().toISOString());
+
+    setSharedProtocolos((prev) =>
+      prev.map((protocolo) =>
+        protocolo.id === mensaje.protocolo_id
+          ? {
+              ...protocolo,
+              chatMessagesCount: (protocolo.chatMessagesCount || 0) + 1,
+              chatLastMessageAt: mensaje.created_at || new Date().toISOString()
+            }
+          : protocolo
+      )
+    );
 
     const isOwnMessage = (
       (user?.id && mensaje.user_id && String(user.id) === String(mensaje.user_id)) ||
@@ -13998,6 +14012,15 @@ const Dashboard = ({ user, onLogout }) => {
     user.role === 'compras' &&
     (dashboardUserName.includes('joaquin') || dashboardUserEmail.includes('joaquin'))
   );
+  const protocolosConMensajesSinLeer = sharedProtocolos.reduce((count, protocolo) => {
+    const readCount = sharedChatReadState?.[protocolo.id]?.readCount || 0;
+    const unreadCount = Math.max(0, (protocolo.chatMessagesCount || 0) - readCount);
+    return count + (unreadCount > 0 ? 1 : 0);
+  }, 0);
+  const totalMensajesSinLeer = sharedProtocolos.reduce((count, protocolo) => {
+    const readCount = sharedChatReadState?.[protocolo.id]?.readCount || 0;
+    return count + Math.max(0, (protocolo.chatMessagesCount || 0) - readCount);
+  }, 0);
 
   // Permisos por rol
   const hasAccess = (module) => {
@@ -14060,6 +14083,29 @@ const Dashboard = ({ user, onLogout }) => {
                 className="h-12 w-auto"
                 style={{ filter: 'brightness(0) invert(1)' }}
               />
+              {hasAccess('protocolos') && totalMensajesSinLeer > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setActiveModule('protocolos')}
+                  className="group flex items-center gap-3 rounded-2xl border border-white/20 bg-white/12 px-4 py-2 shadow-lg backdrop-blur-md transition-all hover:bg-white/18 hover:shadow-xl"
+                  title="Ir a Protocolos"
+                >
+                  <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white/20">
+                    <MessageCircle className="h-5 w-5 text-white" />
+                    <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#f97316] px-1 text-[11px] font-bold text-white">
+                      {totalMensajesSinLeer}
+                    </span>
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-bold leading-tight text-white">
+                      Tienes {totalMensajesSinLeer} mensaje{totalMensajesSinLeer === 1 ? '' : 's'} sin leer
+                    </p>
+                    <p className="text-xs text-white/75">
+                      {protocolosConMensajesSinLeer} protocolo{protocolosConMensajesSinLeer === 1 ? '' : 's'} con chat pendiente
+                    </p>
+                  </div>
+                </button>
+              )}
             </div>
             
             {/* Logo Building Me centrado */}
@@ -14335,6 +14381,8 @@ const Dashboard = ({ user, onLogout }) => {
               sharedOrdenesCompra={sharedOrdenesCompra}
               setSharedOrdenesCompra={setSharedOrdenesCompra}
               sharedCotizaciones={sharedCotizaciones}
+              chatReadState={sharedChatReadState}
+              setChatReadState={setSharedChatReadState}
               protocoloParaAbrir={protocoloParaAbrir}
               onAdjudicarVentaDesdeCotizacion={handleAdjudicarVentaDesdeCotizacion}
               onLimpiarProtocoloParaAbrir={() => setProtocoloParaAbrir(null)}
