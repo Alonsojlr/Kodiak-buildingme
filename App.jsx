@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from './src/lib/supabaseClient';
 import { getCotizaciones, createCotizacion, updateCotizacion, deleteCotizacion } from './src/api/cotizaciones';
 import {
@@ -14149,23 +14149,24 @@ const Dashboard = ({ user, onLogout }) => {
     user.role === 'compras' &&
     (dashboardUserName.includes('joaquin') || dashboardUserEmail.includes('joaquin'))
   );
-  const protocolosConMensajesSinLeer = sharedProtocolos.reduce((count, protocolo) => {
-    const readCount = sharedChatReadState?.[protocolo.id]?.readCount || 0;
-    const unreadCount = Math.max(0, (protocolo.chatMessagesCount || 0) - readCount);
-    return count + (unreadCount > 0 ? 1 : 0);
-  }, 0);
-  const protocolosNoLeidos = sharedProtocolos
-    .map((protocolo) => {
-      const readCount = sharedChatReadState?.[protocolo.id]?.readCount || 0;
-      const unreadCount = Math.max(0, (protocolo.chatMessagesCount || 0) - readCount);
-      return unreadCount > 0 ? { ...protocolo, unreadCount } : null;
-    })
-    .filter(Boolean)
-    .sort((a, b) => new Date(b.chatLastMessageAt || 0) - new Date(a.chatLastMessageAt || 0));
-  const totalMensajesSinLeer = sharedProtocolos.reduce((count, protocolo) => {
-    const readCount = sharedChatReadState?.[protocolo.id]?.readCount || 0;
-    return count + Math.max(0, (protocolo.chatMessagesCount || 0) - readCount);
-  }, 0);
+  const protocolosNoLeidos = useMemo(() => (
+    sharedProtocolos
+      .map((protocolo) => {
+        const readCount = sharedChatReadState?.[protocolo.id]?.readCount || 0;
+        const unreadCount = Math.max(0, (protocolo.chatMessagesCount || 0) - readCount);
+        return unreadCount > 0 ? { ...protocolo, unreadCount } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => new Date(b.chatLastMessageAt || 0) - new Date(a.chatLastMessageAt || 0))
+  ), [sharedProtocolos, sharedChatReadState]);
+  const protocolosConMensajesSinLeer = useMemo(
+    () => protocolosNoLeidos.length,
+    [protocolosNoLeidos]
+  );
+  const totalMensajesSinLeer = useMemo(
+    () => protocolosNoLeidos.reduce((count, protocolo) => count + (protocolo.unreadCount || 0), 0),
+    [protocolosNoLeidos]
+  );
 
   const abrirProtocoloDesdeMensajes = (protocolo) => {
     if (!protocolo) return;
