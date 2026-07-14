@@ -66,6 +66,7 @@ const formatRutInput = (value) => {
 };
 
 const INVENTARIO_FAMILIAS = ['Televisores', 'Sillas', 'Mesas', 'Electricos', 'Varios'];
+const CHAT_READ_STATE_VERSION = 2;
 
 const getInventarioFamilia = (item) => {
   const searchable = normalizePlainText([
@@ -5969,14 +5970,14 @@ const ModalSeleccionarCotizacion = ({ cotizaciones, onClose, onSeleccionar }) =>
   );
 };
 
-const ModalMensajesNoLeidos = ({
-  abierto,
+const DropdownMensajesNoLeidos = ({
+  visible,
   protocolos = [],
   loading = false,
   onClose,
   onSeleccionar
 }) => {
-  if (!abierto) return null;
+  if (!visible) return null;
 
   const formatFechaHora = (value) => {
     if (!value) return 'Sin fecha';
@@ -5992,69 +5993,67 @@ const ModalMensajesNoLeidos = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
-        <div className="p-6 border-b" style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}>
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-2xl font-bold text-white">Mensajes sin leer</h3>
-              <p className="text-sm text-white/80 mt-1">Selecciona el protocolo que quieres responder</p>
-            </div>
-            <button onClick={onClose} className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors">
-              <XCircle className="w-6 h-6" />
-            </button>
+    <div className="absolute top-full left-0 mt-3 w-[430px] max-w-[calc(100vw-2rem)] rounded-2xl bg-white shadow-2xl border border-gray-100 overflow-hidden z-[80]">
+      <div className="p-4 border-b" style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-white">Mensajes sin leer</h3>
+            <p className="text-xs text-white/80 mt-1">Selecciona el protocolo que quieres responder</p>
           </div>
+          <button onClick={onClose} className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors">
+            <XCircle className="w-5 h-5" />
+          </button>
         </div>
+      </div>
 
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)] space-y-4">
-          {loading ? (
-            <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#45ad98] mx-auto mb-4"></div>
-              <p className="text-gray-500">Cargando mensajes pendientes...</p>
-            </div>
-          ) : protocolos.length === 0 ? (
-            <div className="text-center py-12">
-              <MessageCircle className="w-14 h-14 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-500">No hay mensajes sin leer.</p>
-            </div>
-          ) : (
-            protocolos.map((protocolo) => (
-              <button
-                key={protocolo.id}
-                type="button"
-                onClick={() => onSeleccionar(protocolo)}
-                className="w-full text-left border-2 border-gray-200 rounded-2xl p-5 hover:border-[#45ad98] hover:shadow-lg transition-all bg-white"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-3 mb-2 flex-wrap">
-                      <span className="font-mono font-bold text-lg text-[#235250]">PT-{protocolo.folio}</span>
-                      <span className="px-3 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800">
-                        {protocolo.unreadCount} sin leer
-                      </span>
-                    </div>
-                    <p className="text-base font-semibold text-gray-800 truncate">{protocolo.nombreProyecto || 'Sin nombre de proyecto'}</p>
-                    <p className="text-sm text-gray-500 mt-1">{protocolo.cliente || 'Sin cliente'}</p>
-                    <div className="mt-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
-                      <p className="text-xs font-semibold text-gray-600 mb-1">
-                        {protocolo.lastMessageUser || 'Usuario'} · {formatFechaHora(protocolo.lastMessageAt)}
-                      </p>
-                      <p className="text-sm text-gray-700 line-clamp-2">
-                        {protocolo.lastMessageText || 'Sin vista previa del mensaje'}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="shrink-0 pt-1">
-                    <span className="inline-flex items-center px-3 py-2 rounded-xl text-sm font-semibold text-white shadow-md"
-                      style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}>
-                      Abrir
+      <div className="p-3 overflow-y-auto max-h-[420px] space-y-3 bg-gray-50/60">
+        {loading ? (
+          <div className="text-center py-10">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#45ad98] mx-auto mb-3"></div>
+            <p className="text-gray-500 text-sm">Cargando mensajes pendientes...</p>
+          </div>
+        ) : protocolos.length === 0 ? (
+          <div className="text-center py-10">
+            <MessageCircle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500 text-sm">No hay mensajes sin leer.</p>
+          </div>
+        ) : (
+          protocolos.map((protocolo) => (
+            <button
+              key={protocolo.id}
+              type="button"
+              onClick={() => onSeleccionar(protocolo)}
+              className="w-full text-left border border-gray-200 rounded-2xl p-4 hover:border-[#45ad98] hover:shadow-md transition-all bg-white"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <span className="font-mono font-bold text-base text-[#235250]">PT-{protocolo.folio}</span>
+                    <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-orange-100 text-orange-800">
+                      {protocolo.unreadCount} sin leer
                     </span>
                   </div>
+                  <p className="text-sm font-semibold text-gray-800 truncate">{protocolo.nombreProyecto || 'Sin nombre de proyecto'}</p>
+                  <p className="text-xs text-gray-500 mt-1">{protocolo.cliente || 'Sin cliente'}</p>
+                  <div className="mt-2 p-2.5 rounded-xl bg-gray-50 border border-gray-100">
+                    <p className="text-[11px] font-semibold text-gray-600 mb-1">
+                      {protocolo.lastMessageUser || 'Usuario'} · {formatFechaHora(protocolo.lastMessageAt)}
+                    </p>
+                    <p className="text-xs text-gray-700 line-clamp-2">
+                      {protocolo.lastMessageText || 'Sin vista previa del mensaje'}
+                    </p>
+                  </div>
                 </div>
-              </button>
-            ))
-          )}
-        </div>
+                <div className="shrink-0 pt-1">
+                  <span className="inline-flex items-center px-3 py-2 rounded-xl text-xs font-semibold text-white shadow-md"
+                    style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}>
+                    Abrir
+                  </span>
+                </div>
+              </div>
+            </button>
+          ))
+        )}
       </div>
     </div>
   );
@@ -13514,7 +13513,7 @@ const Dashboard = ({ user, onLogout }) => {
   const [sharedOrdenesCompra, setSharedOrdenesCompra] = useState([]);
   const chatReadStorageKey = `protocolos.chatReadState.${String(user?.id || user?.email || 'anon').toLowerCase()}`;
   const [sharedChatReadState, setSharedChatReadState] = useState({});
-  const [showUnreadChatModal, setShowUnreadChatModal] = useState(false);
+  const [showUnreadChatDropdown, setShowUnreadChatDropdown] = useState(false);
   const [loadingUnreadChatSummaries, setLoadingUnreadChatSummaries] = useState(false);
   const [unreadChatSummaries, setUnreadChatSummaries] = useState({});
   const [datosPreOC, setDatosPreOC] = useState(null);
@@ -13545,6 +13544,23 @@ const Dashboard = ({ user, onLogout }) => {
       setSharedChatReadState({});
     }
   }, [chatReadStorageKey]);
+
+  useEffect(() => {
+    if (sharedProtocolos.length === 0) return;
+    const currentVersion = sharedChatReadState?.__version;
+    if (currentVersion === CHAT_READ_STATE_VERSION) return;
+
+    setSharedChatReadState((prev) => {
+      const migrated = { __version: CHAT_READ_STATE_VERSION };
+      sharedProtocolos.forEach((protocolo) => {
+        migrated[protocolo.id] = {
+          readCount: Math.max(0, Number(protocolo.chatMessagesCount) || 0),
+          readAt: new Date().toISOString()
+        };
+      });
+      return migrated;
+    });
+  }, [sharedProtocolos, sharedChatReadState?.__version]);
 
   useEffect(() => {
     try {
@@ -14153,7 +14169,7 @@ const Dashboard = ({ user, onLogout }) => {
 
   const abrirProtocoloDesdeMensajes = (protocolo) => {
     if (!protocolo) return;
-    setShowUnreadChatModal(false);
+    setShowUnreadChatDropdown(false);
     setProtocoloParaAbrir({ ...protocolo });
     setActiveModule('protocolos');
   };
@@ -14164,11 +14180,11 @@ const Dashboard = ({ user, onLogout }) => {
       abrirProtocoloDesdeMensajes(protocolosNoLeidos[0]);
       return;
     }
-    setShowUnreadChatModal(true);
+    setShowUnreadChatDropdown((prev) => !prev);
   };
 
   useEffect(() => {
-    if (!showUnreadChatModal) return;
+    if (!showUnreadChatDropdown) return;
 
     const protocoloIds = protocolosNoLeidos.map((protocolo) => protocolo.id).filter(Boolean);
     if (!protocoloIds.length) {
@@ -14219,7 +14235,11 @@ const Dashboard = ({ user, onLogout }) => {
     return () => {
       cancelled = true;
     };
-  }, [showUnreadChatModal, protocolosNoLeidos]);
+  }, [showUnreadChatDropdown, protocolosNoLeidos]);
+
+  useEffect(() => {
+    setShowUnreadChatDropdown(false);
+  }, [activeModule]);
 
   // Permisos por rol
   const hasAccess = (module) => {
@@ -14283,27 +14303,40 @@ const Dashboard = ({ user, onLogout }) => {
                 style={{ filter: 'brightness(0) invert(1)' }}
               />
               {hasAccess('protocolos') && totalMensajesSinLeer > 0 && (
-                <button
-                  type="button"
-                  onClick={handleHeaderChatAlertClick}
-                  className="group flex items-center gap-3 rounded-2xl border border-white/20 bg-white/12 px-4 py-2 shadow-lg backdrop-blur-md transition-all hover:bg-white/18 hover:shadow-xl"
-                  title="Ver mensajes pendientes"
-                >
-                  <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white/20">
-                    <MessageCircle className="h-5 w-5 text-white" />
-                    <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#f97316] px-1 text-[11px] font-bold text-white">
-                      {totalMensajesSinLeer}
-                    </span>
-                  </div>
-                  <div className="text-left">
-                    <p className="text-sm font-bold leading-tight text-white">
-                      Tienes {totalMensajesSinLeer} mensaje{totalMensajesSinLeer === 1 ? '' : 's'} sin leer
-                    </p>
-                    <p className="text-xs text-white/75">
-                      {protocolosConMensajesSinLeer} protocolo{protocolosConMensajesSinLeer === 1 ? '' : 's'} con chat pendiente
-                    </p>
-                  </div>
-                </button>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={handleHeaderChatAlertClick}
+                    className="group flex items-center gap-3 rounded-2xl border border-white/20 bg-white/12 px-4 py-2 shadow-lg backdrop-blur-md transition-all hover:bg-white/18 hover:shadow-xl"
+                    title="Ver mensajes pendientes"
+                  >
+                    <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white/20">
+                      <MessageCircle className="h-5 w-5 text-white" />
+                      <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#f97316] px-1 text-[11px] font-bold text-white">
+                        {totalMensajesSinLeer}
+                      </span>
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-bold leading-tight text-white">
+                        Tienes {totalMensajesSinLeer} mensaje{totalMensajesSinLeer === 1 ? '' : 's'} sin leer
+                      </p>
+                      <p className="text-xs text-white/75">
+                        {protocolosConMensajesSinLeer} protocolo{protocolosConMensajesSinLeer === 1 ? '' : 's'} con chat pendiente
+                      </p>
+                    </div>
+                  </button>
+
+                  <DropdownMensajesNoLeidos
+                    visible={showUnreadChatDropdown && protocolosNoLeidos.length > 1}
+                    loading={loadingUnreadChatSummaries}
+                    protocolos={protocolosNoLeidos.map((protocolo) => ({
+                      ...protocolo,
+                      ...unreadChatSummaries[protocolo.id]
+                    }))}
+                    onClose={() => setShowUnreadChatDropdown(false)}
+                    onSeleccionar={abrirProtocoloDesdeMensajes}
+                  />
+                </div>
               )}
             </div>
             
@@ -14631,17 +14664,6 @@ const Dashboard = ({ user, onLogout }) => {
             <AuditoriasModule user={user} />
           )}
         </main>
-
-        <ModalMensajesNoLeidos
-          abierto={showUnreadChatModal}
-          loading={loadingUnreadChatSummaries}
-          protocolos={protocolosNoLeidos.map((protocolo) => ({
-            ...protocolo,
-            ...unreadChatSummaries[protocolo.id]
-          }))}
-          onClose={() => setShowUnreadChatModal(false)}
-          onSeleccionar={abrirProtocoloDesdeMensajes}
-        />
     </div>
   );
 };
