@@ -294,6 +294,7 @@ const getRoleLabel = (role) => {
     admin: 'Admin',
     comercial: 'Comercial',
     compras: 'Compras',
+    diseno: 'Diseño',
     finanzas: 'Finanzas',
     auditor: 'Auditor',
     trade_marketing: 'TradeMarketing'
@@ -306,7 +307,7 @@ const LOGIN_PORTALS = [
     id: 'buildingme',
     title: 'Building Me',
     subtitle: 'Acceso General',
-    allowedRoles: ['admin', 'comercial', 'compras', 'finanzas'],
+    allowedRoles: ['admin', 'comercial', 'compras', 'diseno', 'finanzas'],
     buttonLabel: 'Entrar a Building Me'
   },
   {
@@ -6101,7 +6102,7 @@ const ProtocolosModule = ({
   const protocoloSeleccionadoRef = useRef(null);
 
   const userEmail = String(user?.email || '').toLowerCase();
-  const canEditDeleteProtocolos = user?.role !== 'comercial';
+  const canEditDeleteProtocolos = !['comercial', 'diseno'].includes(user?.role);
   const canManageProtocoloCore = ['admin', 'comercial', 'compras'].includes(
     String(user?.role || '').toLowerCase()
   );
@@ -6804,7 +6805,7 @@ const ProtocolosModule = ({
             onNuevoProtocolo={() => setShowNewModal(true)}
             onEliminar={(protocolo) => {
               if (!canEditDeleteProtocolos) {
-                alert('El rol Comercial no puede eliminar protocolos.');
+                alert('Este rol no puede eliminar protocolos.');
                 return;
               }
               setConfirmDeleteProt(protocolo);
@@ -7587,7 +7588,7 @@ const VistaDetalleProtocolo = ({
   );
   const bloquearEdicionComercial = () => {
     if (!canEditProtocolo) {
-      alert('El rol Comercial no puede editar protocolos.');
+      alert('Este rol no puede editar protocolos.');
       return true;
     }
     return false;
@@ -13530,6 +13531,7 @@ const CartaGanttModule = ({ activeModule, sharedProtocolos }) => {
 const Dashboard = ({ user, onLogout }) => {
   const getDefaultModuleByRole = (role) => {
     if (['auditor', 'trade_marketing'].includes(role)) return 'auditorias';
+    if (role === 'diseno') return 'forecast';
     if (role === 'compras') return 'protocolos';
     return 'dashboard';
   };
@@ -14668,6 +14670,7 @@ const Dashboard = ({ user, onLogout }) => {
     if (isAdminLike) return true;
     if (module === 'administracion' && canAccessAdministracion) return true;
     if (user.role === 'compras' && ['forecast', 'protocolos', 'gantt', 'ordenes', 'proveedores', 'inventario', 'auditorias'].includes(module)) return true;
+    if (user.role === 'diseno' && ['forecast', 'protocolos', 'gantt', 'proveedores', 'inventario', 'clientes'].includes(module)) return true;
     if (user.role === 'finanzas' && ['cotizaciones', 'clientes', 'facturacion'].includes(module)) return true;
     if (['auditor', 'trade_marketing'].includes(user.role) && module === 'auditorias') return true;
     return false;
@@ -14681,14 +14684,14 @@ const Dashboard = ({ user, onLogout }) => {
 
   const menuItems = [
     { id: 'dashboard', name: 'Dashboard', icon: BarChart3, roles: ['admin', 'comercial', 'finanzas'] },
-    { id: 'forecast', name: 'Forecast', icon: Clock, roles: ['admin', 'comercial', 'compras'] },
+    { id: 'forecast', name: 'Forecast', icon: Clock, roles: ['admin', 'comercial', 'compras', 'diseno'] },
     { id: 'cotizaciones', name: 'Cotizaciones', icon: FileText, roles: ['admin', 'comercial', 'finanzas'] },
-    { id: 'protocolos', name: 'Protocolos de Compra', icon: Package, roles: ['admin', 'comercial', 'compras'] },
-    { id: 'gantt', name: 'Carta Gantt', icon: Calendar, roles: ['admin', 'comercial', 'compras'] },
+    { id: 'protocolos', name: 'Protocolos de Compra', icon: Package, roles: ['admin', 'comercial', 'compras', 'diseno'] },
+    { id: 'gantt', name: 'Carta Gantt', icon: Calendar, roles: ['admin', 'comercial', 'compras', 'diseno'] },
     { id: 'ordenes', name: 'Órdenes de Compra', icon: ShoppingCart, roles: ['admin', 'comercial', 'compras'] },
-    { id: 'inventario', name: 'Bodega/Inventario', icon: Package, roles: ['admin', 'comercial', 'compras'] },
-    { id: 'proveedores', name: 'Proveedores', icon: Building2, roles: ['admin', 'comercial', 'compras'] },
-    { id: 'clientes', name: 'Clientes', icon: Users, roles: ['admin', 'comercial', 'finanzas'] },
+    { id: 'inventario', name: 'Bodega/Inventario', icon: Package, roles: ['admin', 'comercial', 'compras', 'diseno'] },
+    { id: 'proveedores', name: 'Proveedores', icon: Building2, roles: ['admin', 'comercial', 'compras', 'diseno'] },
+    { id: 'clientes', name: 'Clientes', icon: Users, roles: ['admin', 'comercial', 'finanzas', 'diseno'] },
     { id: 'informes', name: 'Informes', icon: TrendingUp, roles: ['admin', 'comercial', 'finanzas'] },
     { id: 'auditorias', name: 'Auditorías', icon: ClipboardCheck, roles: ['admin', 'comercial', 'auditor', 'trade_marketing', 'compras'] },
     { id: 'administracion', name: 'Administración', icon: Settings, roles: ['admin', 'comercial'] }
@@ -15109,7 +15112,9 @@ const Dashboard = ({ user, onLogout }) => {
             />
           )}
 
-          <CartaGanttModule activeModule={activeModule} sharedProtocolos={sharedProtocolos} />
+          {hasAccess('gantt') && (
+            <CartaGanttModule activeModule={activeModule} sharedProtocolos={sharedProtocolos} />
+          )}
 
           {activeModule === 'ordenes' && hasAccess('ordenes') && (
   <OrdenesCompraModule 
@@ -15135,15 +15140,19 @@ const Dashboard = ({ user, onLogout }) => {
           )}
 
           {/* Módulo de Inventario/Bodega */}
-          <InventarioModule activeModule={activeModule} sharedProtocolos={sharedProtocolos} />
+          {hasAccess('inventario') && (
+            <InventarioModule activeModule={activeModule} sharedProtocolos={sharedProtocolos} />
+          )}
 
           {/* Módulo de Informes */}
-          <InformesModule
-            activeModule={activeModule}
-            sharedProtocolos={sharedProtocolos}
-            sharedOrdenesCompra={sharedOrdenesCompra}
-            sharedCotizaciones={sharedCotizaciones}
-          />
+          {hasAccess('informes') && (
+            <InformesModule
+              activeModule={activeModule}
+              sharedProtocolos={sharedProtocolos}
+              sharedOrdenesCompra={sharedOrdenesCompra}
+              sharedCotizaciones={sharedCotizaciones}
+            />
+          )}
 
           {/* Módulo de Auditorías */}
           {activeModule === 'auditorias' && hasAccess('auditorias') && (
