@@ -21,6 +21,7 @@ import { BarChart3, FileText, ShoppingCart, Package, Users, Building2, Settings,
 import { generarCotizacionPDF, generarOCPDF, generarProtocoloPDF } from './src/utils/documentGenerator';
 import AuditoriasModule from './src/components/auditorias/AuditoriasModule';
 import { ReportesModule as InformesModule } from './src/components/reportes/ReportesModule';
+import ForecastModule from './src/components/forecast/ForecastModule';
 
 const TOAST_EVENT = 'app-toast';
 
@@ -11427,6 +11428,8 @@ const CotizacionesModule = ({
   setSharedCotizaciones = () => {},
   sharedProtocolos = [],
   sharedOrdenesCompra = [],
+  cotizacionParaAbrir = null,
+  onLimpiarCotizacionParaAbrir = () => {},
   currentUserName,
   user
 }) => {
@@ -11471,6 +11474,19 @@ const [showNewModal, setShowNewModal] = useState(false);
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  useEffect(() => {
+    if (!cotizacionParaAbrir || cotizaciones.length === 0) return;
+    const cotizacionObjetivo = cotizaciones.find((cotizacion) => {
+      if (cotizacionParaAbrir?.id && cotizacion.id === cotizacionParaAbrir.id) return true;
+      if (cotizacionParaAbrir?.numero && String(cotizacion.numero) === String(cotizacionParaAbrir.numero)) return true;
+      return false;
+    });
+    if (!cotizacionObjetivo) return;
+    setCotizacionSeleccionada(cotizacionObjetivo);
+    setShowDetalleModal(true);
+    onLimpiarCotizacionParaAbrir?.();
+  }, [cotizacionParaAbrir, cotizaciones, onLimpiarCotizacionParaAbrir]);
 
   const loadCotizaciones = async () => {
     try {
@@ -13524,6 +13540,7 @@ const Dashboard = ({ user, onLogout }) => {
   const [showUnreadChatDropdown, setShowUnreadChatDropdown] = useState(false);
   const [loadingUnreadChatSummaries, setLoadingUnreadChatSummaries] = useState(false);
   const [unreadChatSummaries, setUnreadChatSummaries] = useState({});
+  const [cotizacionParaAbrir, setCotizacionParaAbrir] = useState(null);
   const [datosPreOC, setDatosPreOC] = useState(null);
   const [protocoloParaAbrir, setProtocoloParaAbrir] = useState(null);
   const chatNotifyProcessedIdsRef = useRef(new Set());
@@ -14183,6 +14200,28 @@ const Dashboard = ({ user, onLogout }) => {
     setActiveModule('protocolos');
   };
 
+  const abrirCotizacionDesdeForecast = (cotizacionId) => {
+    if (!cotizacionId) return;
+    const cotizacion = sharedCotizaciones.find((item) => String(item.id) === String(cotizacionId));
+    if (!cotizacion) {
+      setActiveModule('cotizaciones');
+      return;
+    }
+    setCotizacionParaAbrir({ id: cotizacion.id, numero: cotizacion.numero });
+    setActiveModule('cotizaciones');
+  };
+
+  const abrirProtocoloDesdeForecast = (protocoloId) => {
+    if (!protocoloId) return;
+    const protocolo = sharedProtocolos.find((item) => String(item.id) === String(protocoloId));
+    if (!protocolo) {
+      setActiveModule('protocolos');
+      return;
+    }
+    setProtocoloParaAbrir({ id: protocolo.id, folio: protocolo.folio });
+    setActiveModule('protocolos');
+  };
+
   const handleHeaderChatAlertClick = () => {
     if (protocolosNoLeidos.length === 0) return;
     if (protocolosNoLeidos.length === 1) {
@@ -14254,7 +14293,7 @@ const Dashboard = ({ user, onLogout }) => {
   const hasAccess = (module) => {
     if (isAdminLike) return true;
     if (module === 'administracion' && canAccessAdministracion) return true;
-    if (user.role === 'compras' && ['protocolos', 'gantt', 'ordenes', 'proveedores', 'inventario', 'auditorias'].includes(module)) return true;
+    if (user.role === 'compras' && ['forecast', 'protocolos', 'gantt', 'ordenes', 'proveedores', 'inventario', 'auditorias'].includes(module)) return true;
     if (user.role === 'finanzas' && ['cotizaciones', 'clientes', 'facturacion'].includes(module)) return true;
     if (['auditor', 'trade_marketing'].includes(user.role) && module === 'auditorias') return true;
     return false;
@@ -14268,6 +14307,7 @@ const Dashboard = ({ user, onLogout }) => {
 
   const menuItems = [
     { id: 'dashboard', name: 'Dashboard', icon: BarChart3, roles: ['admin', 'comercial', 'finanzas'] },
+    { id: 'forecast', name: 'Forecast', icon: Clock, roles: ['admin', 'comercial', 'compras'] },
     { id: 'cotizaciones', name: 'Cotizaciones', icon: FileText, roles: ['admin', 'comercial', 'finanzas'] },
     { id: 'protocolos', name: 'Protocolos de Compra', icon: Package, roles: ['admin', 'comercial', 'compras'] },
     { id: 'gantt', name: 'Carta Gantt', icon: Calendar, roles: ['admin', 'comercial', 'compras'] },
@@ -14609,9 +14649,22 @@ const Dashboard = ({ user, onLogout }) => {
               setSharedCotizaciones={setSharedCotizaciones}
               sharedProtocolos={sharedProtocolos}
               sharedOrdenesCompra={sharedOrdenesCompra}
+              cotizacionParaAbrir={cotizacionParaAbrir}
+              onLimpiarCotizacionParaAbrir={() => setCotizacionParaAbrir(null)}
               onAdjudicarVenta={handleAdjudicarVentaDesdeCotizacion}
               currentUserName={user?.name}
               user={user}
+            />
+          )}
+
+          {activeModule === 'forecast' && hasAccess('forecast') && (
+            <ForecastModule
+              activeModule={activeModule}
+              sharedCotizaciones={sharedCotizaciones}
+              sharedProtocolos={sharedProtocolos}
+              currentUserName={user?.name}
+              onOpenCotizacion={abrirCotizacionDesdeForecast}
+              onOpenProtocolo={abrirProtocoloDesdeForecast}
             />
           )}
 
