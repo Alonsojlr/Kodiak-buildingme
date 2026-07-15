@@ -23,6 +23,7 @@ import AuditoriasModule from './src/components/auditorias/AuditoriasModule';
 import { ReportesModule as InformesModule } from './src/components/reportes/ReportesModule';
 import ForecastModule from './src/components/forecast/ForecastModule';
 import { getForecasts as getForecastRecords } from './src/api/forecast';
+import { buildMentionUsers, getDetectedMentionUsers, getMentionSearchState, getMentionSegments, getMentionSuggestions, getUnknownMentionTokens, replaceMentionAtCursor } from './src/utils/chatMentions';
 
 const TOAST_EVENT = 'app-toast';
 
@@ -6124,6 +6125,7 @@ const ProtocolosModule = ({
   sharedOrdenesCompra = [],
   setSharedOrdenesCompra = () => {},
   sharedCotizaciones = [],
+  mentionUsers = [],
   chatReadState = {},
   setChatReadState = () => {},
   protocoloParaAbrir,
@@ -6659,6 +6661,7 @@ const ProtocolosModule = ({
         <VistaDetalleProtocolo
           protocolo={protocoloSeleccionado}
           ordenesCompra={ordenesCompra}
+          mentionUsers={mentionUsers}
           currentUserName={currentUserName}
           currentUser={user}
           hideFinancials={hideFinancials}
@@ -7318,19 +7321,41 @@ const VistaListadoProtocolos = ({ protocolos, chatReadState = {}, onVerDetalle, 
 // ========================================
 // VISTA DETALLE DEL PROTOCOLO (PÁGINA COMPLETA)
 // ========================================
-const ProtocoloChatPanel = ({ protocolo, currentUserName, currentUser }) => {
+const ProtocoloChatPanel = ({ protocolo, mentionUsers = [], currentUserName, currentUser }) => {
   const [mensajes, setMensajes] = useState([]);
   const [nuevoMensaje, setNuevoMensaje] = useState('');
   const [loadingMensajes, setLoadingMensajes] = useState(true);
   const [enviandoMensaje, setEnviandoMensaje] = useState(false);
   const [errorChat, setErrorChat] = useState('');
+  const [mentionCursorIndex, setMentionCursorIndex] = useState(0);
+  const [mentionSuggestionIndex, setMentionSuggestionIndex] = useState(0);
   const listEndRef = useRef(null);
   const lastMessageAtRef = useRef(null);
+  const textareaRef = useRef(null);
 
   const protocoloId = protocolo?.id;
   const senderName = currentUserName || currentUser?.name || currentUser?.email || 'Usuario';
   const senderEmail = currentUser?.email || null;
   const senderId = currentUser?.id || null;
+  const mentionSuggestions = useMemo(
+    () => getMentionSuggestions(nuevoMensaje, mentionCursorIndex, mentionUsers),
+    [nuevoMensaje, mentionCursorIndex, mentionUsers]
+  );
+  const activeMentionSearch = useMemo(
+    () => getMentionSearchState(nuevoMensaje, mentionCursorIndex),
+    [nuevoMensaje, mentionCursorIndex]
+  );
+  const detectedMentionUsers = useMemo(
+    () => getDetectedMentionUsers(nuevoMensaje, mentionUsers),
+    [nuevoMensaje, mentionUsers]
+  );
+  const unknownMentionTokens = useMemo(
+    () =>
+      getUnknownMentionTokens(nuevoMensaje, mentionUsers).filter(
+        (token) => token !== activeMentionSearch?.query
+      ),
+    [nuevoMensaje, mentionUsers, activeMentionSearch?.query]
+  );
 
   const mapMensaje = (raw) => ({
     id: raw.id,
@@ -7400,6 +7425,37 @@ const ProtocoloChatPanel = ({ protocolo, currentUserName, currentUser }) => {
 
     const key = mensaje.userEmail || mensaje.userName || mensaje.userId || 'otro';
     return palette[hashString(key) % palette.length];
+  };
+
+  const renderMessageText = (texto, bubbleStyle) => (
+    <p className="text-sm whitespace-pre-wrap break-words" style={{ color: bubbleStyle.textColor }}>
+      {getMentionSegments(texto, mentionUsers).map((segment, index) => (
+        segment.isMention ? (
+          <span
+            key={`${segment.text}-${index}`}
+            className="font-bold underline underline-offset-2"
+          >
+            {segment.text}
+          </span>
+        ) : (
+          <span key={`${segment.text}-${index}`}>{segment.text}</span>
+        )
+      ))}
+    </p>
+  );
+
+  const applyMention = (mentionUser) => {
+    const cursor = textareaRef.current?.selectionStart ?? mentionCursorIndex;
+    const result = replaceMentionAtCursor(nuevoMensaje, cursor, mentionUser);
+    setNuevoMensaje(result.value);
+    setMentionCursorIndex(result.cursor);
+    setMentionSuggestionIndex(0);
+
+    requestAnimationFrame(() => {
+      if (!textareaRef.current) return;
+      textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(result.cursor, result.cursor);
+    });
   };
 
   useEffect(() => {
@@ -7581,9 +7637,7 @@ const ProtocoloChatPanel = ({ protocolo, currentUserName, currentUser }) => {
                     {mensaje.userEmail ? ` · ${mensaje.userEmail}` : ''}
                     {mensaje.createdAt ? ` · ${formatHora(mensaje.createdAt)}` : ''}
                   </p>
-                  <p className="text-sm whitespace-pre-wrap break-words" style={{ color: bubbleStyle.textColor }}>
-                    {mensaje.texto}
-                  </p>
+                  {renderMessageText(mensaje.texto, bubbleStyle)}
                 </div>
               </div>
             );
@@ -7593,10 +7647,42 @@ const ProtocoloChatPanel = ({ protocolo, currentUserName, currentUser }) => {
       </div>
 
       <div className="p-3 border-t border-gray-100 bg-white">
+        <div className="relative">
         <textarea
+          ref={textareaRef}
           value={nuevoMensaje}
-          onChange={(e) => setNuevoMensaje(e.target.value)}
+          onChange={(e) => {
+            setNuevoMensaje(e.target.value);
+            setMentionCursorIndex(e.target.selectionStart || e.target.value.length);
+            setMentionSuggestionIndex(0);
+          }}
+          onClick={(e) => setMentionCursorIndex(e.target.selectionStart || 0)}
+          onKeyUp={(e) => setMentionCursorIndex(e.currentTarget.selectionStart || 0)}
+          onSelect={(e) => setMentionCursorIndex(e.currentTarget.selectionStart || 0)}
           onKeyDown={(e) => {
+            if (mentionSuggestions.length > 0) {
+              if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setMentionSuggestionIndex((prev) => (prev + 1) % mentionSuggestions.length);
+                return;
+              }
+              if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setMentionSuggestionIndex((prev) => (prev - 1 + mentionSuggestions.length) % mentionSuggestions.length);
+                return;
+              }
+              if (e.key === 'Enter' || e.key === 'Tab') {
+                e.preventDefault();
+                applyMention(mentionSuggestions[mentionSuggestionIndex] || mentionSuggestions[0]);
+                return;
+              }
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                setMentionSuggestionIndex(0);
+                setMentionCursorIndex(0);
+                return;
+              }
+            }
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               enviarMensaje();
@@ -7606,6 +7692,41 @@ const ProtocoloChatPanel = ({ protocolo, currentUserName, currentUser }) => {
           placeholder="Escribe un mensaje para el equipo. Usa @nombre para notificar a alguien."
           className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#45ad98]"
         />
+        {mentionSuggestions.length > 0 && (
+          <div className="absolute left-0 right-0 bottom-full mb-2 rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden z-20">
+            {mentionSuggestions.map((mentionUser, index) => (
+              <button
+                key={mentionUser.id}
+                type="button"
+                onClick={() => applyMention(mentionUser)}
+                className={`w-full px-4 py-3 text-left transition-colors ${
+                  index === mentionSuggestionIndex ? 'bg-[#45ad98]/10' : 'hover:bg-gray-50'
+                }`}
+              >
+                <p className="font-semibold text-gray-800">{mentionUser.displayName}</p>
+                <p className="text-xs text-gray-500">@{mentionUser.mentionKey}{mentionUser.email ? ` · ${mentionUser.email}` : ''}</p>
+              </button>
+            ))}
+          </div>
+        )}
+        </div>
+        {detectedMentionUsers.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {detectedMentionUsers.map((mentionUser) => (
+              <span
+                key={mentionUser.id}
+                className="inline-flex items-center rounded-full bg-[#45ad98]/10 px-3 py-1 text-xs font-semibold text-[#235250]"
+              >
+                Notificará a {mentionUser.displayName}
+              </span>
+            ))}
+          </div>
+        )}
+        {unknownMentionTokens.length > 0 && (
+          <p className="mt-2 text-xs text-amber-600">
+            Mención no reconocida: {unknownMentionTokens.map((token) => `@${token}`).join(', ')}
+          </p>
+        )}
         {errorChat && <p className="text-xs text-red-600 mt-2">{errorChat}</p>}
         <button
           onClick={enviarMensaje}
@@ -7623,6 +7744,7 @@ const ProtocoloChatPanel = ({ protocolo, currentUserName, currentUser }) => {
 const VistaDetalleProtocolo = ({
   protocolo,
   ordenesCompra,
+  mentionUsers = [],
   onVolver,
   onAdjudicarCompra,
   onActualizar,
@@ -8082,6 +8204,7 @@ const VistaDetalleProtocolo = ({
       <div className="order-2 xl:order-2 xl:mt-14">
         <ProtocoloChatPanel
           protocolo={protocolo}
+          mentionUsers={mentionUsers}
           currentUserName={currentUserName}
           currentUser={currentUser}
         />
@@ -13596,6 +13719,7 @@ const Dashboard = ({ user, onLogout }) => {
   const [sharedForecasts, setSharedForecasts] = useState([]);
   const [sharedProtocolos, setSharedProtocolos] = useState([]);
   const [sharedOrdenesCompra, setSharedOrdenesCompra] = useState([]);
+  const [sharedUsers, setSharedUsers] = useState([]);
   const chatReadStorageKey = `protocolos.chatReadState.${String(user?.id || user?.email || 'anon').toLowerCase()}`;
   const forecastChatReadStorageKey = `forecasts.chatReadState.${String(user?.id || user?.email || 'anon').toLowerCase()}`;
   const [sharedChatReadState, setSharedChatReadState] = useState({});
@@ -13633,6 +13757,27 @@ const Dashboard = ({ user, onLogout }) => {
     });
     forecastsByIdRef.current = byId;
   }, [sharedForecasts]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadMentionUsers = async () => {
+      try {
+        const usersData = await getUsuarios();
+        if (cancelled) return;
+        setSharedUsers(buildMentionUsers(usersData || []));
+      } catch (error) {
+        console.error('Error cargando usuarios para menciones:', error);
+        if (!cancelled) setSharedUsers([]);
+      }
+    };
+
+    loadMentionUsers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -15149,6 +15294,7 @@ const Dashboard = ({ user, onLogout }) => {
               sharedForecasts={sharedForecasts}
               sharedCotizaciones={sharedCotizaciones}
               sharedProtocolos={sharedProtocolos}
+              mentionUsers={sharedUsers}
               currentUserName={user?.name}
               currentUser={user}
               forecastParaAbrir={forecastParaAbrir}
@@ -15167,6 +15313,7 @@ const Dashboard = ({ user, onLogout }) => {
               sharedOrdenesCompra={sharedOrdenesCompra}
               setSharedOrdenesCompra={setSharedOrdenesCompra}
               sharedCotizaciones={sharedCotizaciones}
+              mentionUsers={sharedUsers}
               chatReadState={sharedChatReadState}
               setChatReadState={setSharedChatReadState}
               protocoloParaAbrir={protocoloParaAbrir}

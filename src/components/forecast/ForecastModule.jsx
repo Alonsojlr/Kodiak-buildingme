@@ -27,6 +27,7 @@ import {
   Download,
   MessageCircle
 } from 'lucide-react'
+import { getDetectedMentionUsers, getMentionSearchState, getMentionSegments, getMentionSuggestions, getUnknownMentionTokens, replaceMentionAtCursor } from '../../utils/chatMentions'
 
 const TOAST_EVENT = 'app-toast'
 const FORECAST_DOCS_BUCKET = 'audit-fotos'
@@ -622,20 +623,42 @@ const ForecastProgressTimeline = ({ currentStage, onStageClick }) => {
   )
 }
 
-const ForecastChatPanel = ({ forecast, currentUserName, currentUser, onMarkAsRead }) => {
+const ForecastChatPanel = ({ forecast, mentionUsers = [], currentUserName, currentUser, onMarkAsRead }) => {
   const [mensajes, setMensajes] = useState([])
   const [nuevoMensaje, setNuevoMensaje] = useState('')
   const [loadingMensajes, setLoadingMensajes] = useState(true)
   const [enviandoMensaje, setEnviandoMensaje] = useState(false)
   const [errorChat, setErrorChat] = useState('')
+  const [mentionCursorIndex, setMentionCursorIndex] = useState(0)
+  const [mentionSuggestionIndex, setMentionSuggestionIndex] = useState(0)
   const messagesContainerRef = useRef(null)
   const lastMessageAtRef = useRef(null)
   const markAsReadRef = useRef(onMarkAsRead)
+  const textareaRef = useRef(null)
 
   const forecastId = forecast?.id
   const senderName = currentUserName || currentUser?.name || currentUser?.email || 'Usuario'
   const senderEmail = currentUser?.email || null
   const senderId = currentUser?.id || null
+  const mentionSuggestions = useMemo(
+    () => getMentionSuggestions(nuevoMensaje, mentionCursorIndex, mentionUsers),
+    [nuevoMensaje, mentionCursorIndex, mentionUsers]
+  )
+  const activeMentionSearch = useMemo(
+    () => getMentionSearchState(nuevoMensaje, mentionCursorIndex),
+    [nuevoMensaje, mentionCursorIndex]
+  )
+  const detectedMentionUsers = useMemo(
+    () => getDetectedMentionUsers(nuevoMensaje, mentionUsers),
+    [nuevoMensaje, mentionUsers]
+  )
+  const unknownMentionTokens = useMemo(
+    () =>
+      getUnknownMentionTokens(nuevoMensaje, mentionUsers).filter(
+        (token) => token !== activeMentionSearch?.query
+      ),
+    [nuevoMensaje, mentionUsers, activeMentionSearch?.query]
+  )
 
   useEffect(() => {
     markAsReadRef.current = onMarkAsRead
@@ -717,6 +740,34 @@ const ForecastChatPanel = ({ forecast, currentUserName, currentUser, onMarkAsRea
 
     const key = mensaje.userEmail || mensaje.userName || mensaje.userId || 'otro'
     return palette[hashString(key) % palette.length]
+  }
+
+  const renderMessageText = (texto, bubbleStyle) => (
+    <p className="text-sm whitespace-pre-wrap break-words" style={{ color: bubbleStyle.textColor }}>
+      {getMentionSegments(texto, mentionUsers).map((segment, index) => (
+        segment.isMention ? (
+          <span key={`${segment.text}-${index}`} className="font-bold underline underline-offset-2">
+            {segment.text}
+          </span>
+        ) : (
+          <span key={`${segment.text}-${index}`}>{segment.text}</span>
+        )
+      ))}
+    </p>
+  )
+
+  const applyMention = (mentionUser) => {
+    const cursor = textareaRef.current?.selectionStart ?? mentionCursorIndex
+    const result = replaceMentionAtCursor(nuevoMensaje, cursor, mentionUser)
+    setNuevoMensaje(result.value)
+    setMentionCursorIndex(result.cursor)
+    setMentionSuggestionIndex(0)
+
+    requestAnimationFrame(() => {
+      if (!textareaRef.current) return
+      textareaRef.current.focus()
+      textareaRef.current.setSelectionRange(result.cursor, result.cursor)
+    })
   }
 
   useEffect(() => {
@@ -912,9 +963,7 @@ const ForecastChatPanel = ({ forecast, currentUserName, currentUser, onMarkAsRea
                     {mensaje.userEmail ? ` · ${mensaje.userEmail}` : ''}
                     {mensaje.createdAt ? ` · ${formatHora(mensaje.createdAt)}` : ''}
                   </p>
-                  <p className="text-sm whitespace-pre-wrap break-words" style={{ color: bubbleStyle.textColor }}>
-                    {mensaje.texto}
-                  </p>
+                  {renderMessageText(mensaje.texto, bubbleStyle)}
                 </div>
               </div>
             )
@@ -923,10 +972,42 @@ const ForecastChatPanel = ({ forecast, currentUserName, currentUser, onMarkAsRea
       </div>
 
       <div className="p-3 border-t border-gray-100 bg-white">
+        <div className="relative">
         <textarea
+          ref={textareaRef}
           value={nuevoMensaje}
-          onChange={(e) => setNuevoMensaje(e.target.value)}
+          onChange={(e) => {
+            setNuevoMensaje(e.target.value)
+            setMentionCursorIndex(e.target.selectionStart || e.target.value.length)
+            setMentionSuggestionIndex(0)
+          }}
+          onClick={(e) => setMentionCursorIndex(e.target.selectionStart || 0)}
+          onKeyUp={(e) => setMentionCursorIndex(e.currentTarget.selectionStart || 0)}
+          onSelect={(e) => setMentionCursorIndex(e.currentTarget.selectionStart || 0)}
           onKeyDown={(e) => {
+            if (mentionSuggestions.length > 0) {
+              if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                setMentionSuggestionIndex((prev) => (prev + 1) % mentionSuggestions.length)
+                return
+              }
+              if (e.key === 'ArrowUp') {
+                e.preventDefault()
+                setMentionSuggestionIndex((prev) => (prev - 1 + mentionSuggestions.length) % mentionSuggestions.length)
+                return
+              }
+              if (e.key === 'Enter' || e.key === 'Tab') {
+                e.preventDefault()
+                applyMention(mentionSuggestions[mentionSuggestionIndex] || mentionSuggestions[0])
+                return
+              }
+              if (e.key === 'Escape') {
+                e.preventDefault()
+                setMentionSuggestionIndex(0)
+                setMentionCursorIndex(0)
+                return
+              }
+            }
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
               enviarMensaje()
@@ -936,6 +1017,41 @@ const ForecastChatPanel = ({ forecast, currentUserName, currentUser, onMarkAsRea
           placeholder="Escribe un mensaje para el equipo. Usa @nombre para notificar a alguien."
           className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#45ad98]"
         />
+        {mentionSuggestions.length > 0 && (
+          <div className="absolute left-0 right-0 bottom-full mb-2 rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden z-20">
+            {mentionSuggestions.map((mentionUser, index) => (
+              <button
+                key={mentionUser.id}
+                type="button"
+                onClick={() => applyMention(mentionUser)}
+                className={`w-full px-4 py-3 text-left transition-colors ${
+                  index === mentionSuggestionIndex ? 'bg-[#45ad98]/10' : 'hover:bg-gray-50'
+                }`}
+              >
+                <p className="font-semibold text-gray-800">{mentionUser.displayName}</p>
+                <p className="text-xs text-gray-500">@{mentionUser.mentionKey}{mentionUser.email ? ` · ${mentionUser.email}` : ''}</p>
+              </button>
+            ))}
+          </div>
+        )}
+        </div>
+        {detectedMentionUsers.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {detectedMentionUsers.map((mentionUser) => (
+              <span
+                key={mentionUser.id}
+                className="inline-flex items-center rounded-full bg-[#45ad98]/10 px-3 py-1 text-xs font-semibold text-[#235250]"
+              >
+                Notificará a {mentionUser.displayName}
+              </span>
+            ))}
+          </div>
+        )}
+        {unknownMentionTokens.length > 0 && (
+          <p className="mt-2 text-xs text-amber-600">
+            Mención no reconocida: {unknownMentionTokens.map((token) => `@${token}`).join(', ')}
+          </p>
+        )}
         {errorChat ? <p className="text-xs text-red-600 mt-2">{errorChat}</p> : null}
         <button
           onClick={enviarMensaje}
@@ -955,6 +1071,7 @@ const ForecastModule = ({
   sharedForecasts = [],
   sharedCotizaciones = [],
   sharedProtocolos = [],
+  mentionUsers = [],
   currentUserName,
   currentUser,
   forecastParaAbrir,
@@ -1549,6 +1666,7 @@ const ForecastModule = ({
               <div className="order-2 xl:order-2 xl:mt-14">
                 <ForecastChatPanel
                   forecast={selectedForecast}
+                  mentionUsers={mentionUsers}
                   currentUserName={currentUserName}
                   currentUser={currentUser}
                   onMarkAsRead={onMarkChatRead}
