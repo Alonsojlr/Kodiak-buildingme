@@ -32,7 +32,7 @@ import { getDetectedMentionUsers, getMentionSearchState, getMentionSegments, get
 
 const TOAST_EVENT = 'app-toast'
 const FORECAST_DOCS_BUCKET = 'audit-fotos'
-const FORECAST_STAGES = ['Brief', 'Render 1', 'Correcciones', 'Render 2', 'Cotización', 'OK Cliente', 'Protocolo']
+const FORECAST_STAGES = ['Brief', 'Render propuesta', 'Correcciones', 'Render final', 'Cotización', 'OK Cliente', 'Protocolo']
 const FORECAST_PRIORITIES = ['Baja', 'Media', 'Alta', 'Urgente']
 const FORECAST_MILESTONE_TYPES = ['Diseño', 'Solicitud Planos', 'Planos', 'Producción Taller', 'Entrega Archivos', 'Carpeta Documentos', 'Entrega Final', 'Otro']
 const BUSINESS_UNITS = ['Vía Pública', 'Stand y Ferias', 'TradeMarketing', 'Inmobiliarias', 'Imprenta', 'Varios', 'Financiamiento']
@@ -1110,6 +1110,7 @@ const ForecastModule = ({
   const [filterStage, setFilterStage] = useState('todos')
   const [previewDocumento, setPreviewDocumento] = useState(null)
   const [guardandoDocumento, setGuardandoDocumento] = useState(false)
+  const selectedForecastIdRef = useRef(null)
   const [documentForm, setDocumentForm] = useState({
     id: null,
     etapa: 'Brief',
@@ -1142,6 +1143,10 @@ const ForecastModule = ({
     () => forecasts.find((item) => item.id === selectedForecastId) || null,
     [forecasts, selectedForecastId]
   )
+
+  useEffect(() => {
+    selectedForecastIdRef.current = selectedForecastId
+  }, [selectedForecastId])
 
   const filteredForecasts = useMemo(() => {
     const searchLower = searchTerm.toLowerCase()
@@ -1327,9 +1332,10 @@ const ForecastModule = ({
       const mapped = mapForecasts(forecastRows || [], documentoRows || [], hitoRows || [])
       setForecasts(mapped)
       setClientes(clientRows || [])
-      if (!keepSelection || !selectedForecastId) {
+      const currentSelectedForecastId = selectedForecastIdRef.current
+      if (!keepSelection || !currentSelectedForecastId) {
         setSelectedForecastId(mapped[0]?.id || null)
-      } else if (!mapped.some((item) => item.id === selectedForecastId)) {
+      } else if (!mapped.some((item) => item.id === currentSelectedForecastId)) {
         setSelectedForecastId(mapped[0]?.id || null)
       }
     } catch (loadError) {
@@ -1527,10 +1533,6 @@ const ForecastModule = ({
     if (!selectedForecast) return
     if (!documentForm.nombre.trim()) {
       notifyToast('Ingresa nombre del documento', 'warning')
-      return
-    }
-    if (!documentForm.file && !documentForm.editUrl.trim() && !documentForm.archivoUrlActual) {
-      notifyToast('Sube un archivo o agrega un link editable', 'warning')
       return
     }
 
@@ -1769,7 +1771,7 @@ const ForecastModule = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
-              <div className="order-2 xl:order-2 xl:mt-14">
+              <div className="order-2 xl:order-2 xl:mt-14 xl:sticky xl:top-[7.25rem] xl:self-start">
                 <ForecastChatPanel
                   forecast={selectedForecast}
                   mentionUsers={mentionUsers}
@@ -1780,7 +1782,7 @@ const ForecastModule = ({
               </div>
 
               <div className="order-1 xl:order-1 space-y-6">
-                <div className="bg-white rounded-2xl shadow-lg p-6">
+                <div className="sticky top-[7.25rem] z-20 bg-white/95 backdrop-blur rounded-2xl shadow-lg p-6 border border-white/70">
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
                   <div>
                     <div className="flex items-center gap-3 flex-wrap">
@@ -2008,7 +2010,7 @@ const ForecastModule = ({
                     value={documentForm.editUrl}
                     onChange={(e) => setDocumentForm((prev) => ({ ...prev, editUrl: e.target.value }))}
                     className="px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98]"
-                    placeholder="Link editable (Drive/Figma/Canva)"
+                    placeholder="Link editable opcional (Drive/Figma/Canva)"
                   />
                   <input
                     type="file"
@@ -2016,6 +2018,18 @@ const ForecastModule = ({
                     className="px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98]"
                   />
                 </div>
+                {documentForm.file ? (
+                  <p className="text-xs text-[#235250] font-medium mb-2">
+                    Archivo seleccionado: {documentForm.file.name}
+                  </p>
+                ) : documentForm.archivoUrlActual ? (
+                  <p className="text-xs text-gray-500 mb-2">
+                    Archivo actual cargado.
+                  </p>
+                ) : null}
+                <p className="text-xs text-gray-500 mb-3">
+                  Archivo y link son opcionales. Puedes guardar solo el registro del documento.
+                </p>
                 {documentForm.id ? (
                   <p className="text-xs text-gray-500 mb-3">
                     Editando documento. Si seleccionas un archivo nuevo, reemplazará el actual.
