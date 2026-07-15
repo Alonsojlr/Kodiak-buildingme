@@ -8,6 +8,7 @@ import {
   deleteForecast,
   getForecastDocuments,
   createForecastDocument,
+  updateForecastDocument,
   deleteForecastDocument,
   getForecastMilestones,
   createForecastMilestone,
@@ -1110,12 +1111,14 @@ const ForecastModule = ({
   const [previewDocumento, setPreviewDocumento] = useState(null)
   const [guardandoDocumento, setGuardandoDocumento] = useState(false)
   const [documentForm, setDocumentForm] = useState({
+    id: null,
     etapa: 'Brief',
     tipo: 'Brief',
     nombre: '',
     editUrl: '',
     comentarios: '',
-    file: null
+    file: null,
+    archivoUrlActual: ''
   })
   const [milestoneForm, setMilestoneForm] = useState({
     titulo: '',
@@ -1190,8 +1193,25 @@ const ForecastModule = ({
       cotizacionId: selectedForecast.cotizacionId || '',
       protocoloId: selectedForecast.protocoloId || ''
     })
-    setDocumentForm((prev) => ({ ...prev, etapa: selectedForecast.etapaActual || 'Brief' }))
+    setDocumentForm((prev) => (
+      prev.id
+        ? prev
+        : { ...prev, etapa: selectedForecast.etapaActual || 'Brief' }
+    ))
   }, [selectedForecast])
+
+  const resetDocumentForm = () => {
+    setDocumentForm({
+      id: null,
+      etapa: selectedForecast?.etapaActual || 'Brief',
+      tipo: 'Documento',
+      nombre: '',
+      editUrl: '',
+      comentarios: '',
+      file: null,
+      archivoUrlActual: ''
+    })
+  }
 
   useEffect(() => {
     if (!Array.isArray(sharedForecasts) || sharedForecasts.length === 0) return
@@ -1490,13 +1510,26 @@ const ForecastModule = ({
     }
   }
 
-  const handleAddDocument = async () => {
+  const handleEditDocument = (documento) => {
+    setDocumentForm({
+      id: documento.id,
+      etapa: documento.etapa || selectedForecast?.etapaActual || 'Brief',
+      tipo: documento.tipo || 'Documento',
+      nombre: documento.nombre || '',
+      editUrl: documento.editUrl || '',
+      comentarios: documento.comentarios || '',
+      file: null,
+      archivoUrlActual: documento.archivoUrl || ''
+    })
+  }
+
+  const handleSaveDocument = async () => {
     if (!selectedForecast) return
     if (!documentForm.nombre.trim()) {
       notifyToast('Ingresa nombre del documento', 'warning')
       return
     }
-    if (!documentForm.file && !documentForm.editUrl.trim()) {
+    if (!documentForm.file && !documentForm.editUrl.trim() && !documentForm.archivoUrlActual) {
       notifyToast('Sube un archivo o agrega un link editable', 'warning')
       return
     }
@@ -1515,24 +1548,35 @@ const ForecastModule = ({
               throw new Error(`No se pudo subir el archivo: ${getErrorMessage(uploadError, 'error de almacenamiento')}`)
             }
           })()
-        : ''
+        : documentForm.archivoUrlActual || ''
 
       const normalizedEditUrl = documentForm.editUrl.trim()
         ? normalizeExternalUrl(documentForm.editUrl)
         : null
 
-      let created
+      let savedDocument
       try {
-        created = await createForecastDocument({
-          forecast_id: selectedForecast.id,
-          etapa: documentForm.etapa,
-          tipo: documentForm.tipo,
-          nombre: documentForm.nombre,
-          archivo_url: archivoUrl || null,
-          edit_url: normalizedEditUrl,
-          comentarios: documentForm.comentarios || null,
-          created_by: currentUserName || currentUser?.email || ''
-        })
+        if (documentForm.id) {
+          savedDocument = await updateForecastDocument(documentForm.id, {
+            etapa: documentForm.etapa,
+            tipo: documentForm.tipo,
+            nombre: documentForm.nombre,
+            archivo_url: archivoUrl || null,
+            edit_url: normalizedEditUrl,
+            comentarios: documentForm.comentarios || null
+          })
+        } else {
+          savedDocument = await createForecastDocument({
+            forecast_id: selectedForecast.id,
+            etapa: documentForm.etapa,
+            tipo: documentForm.tipo,
+            nombre: documentForm.nombre,
+            archivo_url: archivoUrl || null,
+            edit_url: normalizedEditUrl,
+            comentarios: documentForm.comentarios || null,
+            created_by: currentUserName || currentUser?.email || ''
+          })
+        }
       } catch (insertError) {
         throw new Error(`No se pudo guardar el documento: ${getErrorMessage(insertError, 'error de base de datos')}`)
       }
@@ -1545,18 +1589,16 @@ const ForecastModule = ({
       }
 
       await loadForecastData()
-      setDocumentForm({
-        etapa: selectedForecast.etapaActual || 'Brief',
-        tipo: 'Documento',
-        nombre: '',
-        editUrl: '',
-        comentarios: '',
-        file: null
-      })
-      notifyToast(`Documento "${created?.nombre || 'nuevo'}" agregado`, 'success')
+      resetDocumentForm()
+      notifyToast(
+        documentForm.id
+          ? `Documento "${savedDocument?.nombre || 'actualizado'}" actualizado`
+          : `Documento "${savedDocument?.nombre || 'nuevo'}" agregado`,
+        'success'
+      )
     } catch (documentError) {
-      console.error('Error agregando documento:', documentError)
-      notifyToast(getErrorMessage(documentError, 'No se pudo agregar el documento'), 'error')
+      console.error('Error guardando documento:', documentError)
+      notifyToast(getErrorMessage(documentError, 'No se pudo guardar el documento'), 'error')
     } finally {
       setGuardandoDocumento(false)
     }
@@ -1974,6 +2016,11 @@ const ForecastModule = ({
                     className="px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98]"
                   />
                 </div>
+                {documentForm.id ? (
+                  <p className="text-xs text-gray-500 mb-3">
+                    Editando documento. Si seleccionas un archivo nuevo, reemplazará el actual.
+                  </p>
+                ) : null}
                 <textarea
                   value={documentForm.comentarios}
                   onChange={(e) => setDocumentForm((prev) => ({ ...prev, comentarios: e.target.value }))}
@@ -1981,15 +2028,26 @@ const ForecastModule = ({
                   rows="2"
                   placeholder="Comentarios del documento"
                 />
-                <button
-                  type="button"
-                  onClick={handleAddDocument}
-                  disabled={guardandoDocumento}
-                  className="px-5 py-3 rounded-xl text-white font-semibold shadow-lg disabled:opacity-60"
-                  style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
-                >
-                  {guardandoDocumento ? 'Guardando...' : 'Agregar documento'}
-                </button>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={handleSaveDocument}
+                    disabled={guardandoDocumento}
+                    className="px-5 py-3 rounded-xl text-white font-semibold shadow-lg disabled:opacity-60"
+                    style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
+                  >
+                    {guardandoDocumento ? 'Guardando...' : documentForm.id ? 'Guardar cambios' : 'Agregar documento'}
+                  </button>
+                  {documentForm.id ? (
+                    <button
+                      type="button"
+                      onClick={resetDocumentForm}
+                      className="px-5 py-3 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 font-semibold"
+                    >
+                      Cancelar edición
+                    </button>
+                  ) : null}
+                </div>
 
                 <div className="mt-6 space-y-3">
                   {selectedForecast.documentos.length === 0 ? (
@@ -2019,14 +2077,33 @@ const ForecastModule = ({
                           </button>
                         ) : null}
                         {documento.editUrl ? (
-                          <a
-                            href={normalizeExternalUrl(documento.editUrl)}
-                            target="_blank"
-                            rel="noreferrer"
+                          documento.archivoUrl ? (
+                            <button
+                              type="button"
+                              onClick={() => handleEditDocument(documento)}
+                              className="px-3 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-sm font-semibold text-gray-700"
+                            >
+                              Editar documento
+                            </button>
+                          ) : (
+                            <a
+                              href={normalizeExternalUrl(documento.editUrl)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-3 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-sm font-semibold text-gray-700"
+                            >
+                              Ver archivo
+                            </a>
+                          )
+                        ) : null}
+                        {!documento.editUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => handleEditDocument(documento)}
                             className="px-3 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-sm font-semibold text-gray-700"
                           >
-                            {documento.archivoUrl ? 'Editar link' : 'Ver archivo'}
-                          </a>
+                            Editar documento
+                          </button>
                         ) : null}
                         {documento.archivoUrl ? (
                           <a
