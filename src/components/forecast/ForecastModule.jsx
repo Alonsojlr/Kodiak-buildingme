@@ -46,6 +46,50 @@ const sanitizeStorageFileName = (name) =>
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-zA-Z0-9._-]/g, '_')
 
+const normalizePlainText = (value) =>
+  String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+
+const getMentionAliases = ({ name, email } = {}) => {
+  const aliases = new Set()
+
+  const normalizedName = normalizePlainText(name).replace(/\s+/g, ' ').trim()
+  if (normalizedName) {
+    aliases.add(normalizedName.replace(/\s+/g, ''))
+    normalizedName.split(/\s+/).forEach((part) => {
+      if (part.length >= 2) aliases.add(part)
+    })
+  }
+
+  const normalizedEmail = normalizePlainText(email).trim()
+  if (normalizedEmail) {
+    const localPart = normalizedEmail.split('@')[0] || ''
+    const compactLocal = localPart.replace(/\s+/g, '')
+    if (compactLocal) aliases.add(compactLocal)
+    localPart.split(/[._-]+/).forEach((part) => {
+      if (part.length >= 2) aliases.add(part)
+    })
+  }
+
+  return aliases
+}
+
+const extractMentionTokens = (value) => {
+  const normalized = normalizePlainText(value)
+  const matches = normalized.match(/@([a-z0-9._-]+)/g) || []
+  return matches.map((match) => match.slice(1)).filter(Boolean)
+}
+
+const messageMentionsUser = (message, userLike = {}) => {
+  const mentions = extractMentionTokens(message)
+  if (!mentions.length) return false
+  const aliases = getMentionAliases(userLike)
+  if (!aliases.size) return false
+  return mentions.some((mention) => aliases.has(mention))
+}
+
 const formatRutInput = (value) => {
   const clean = String(value || '')
     .replace(/[^0-9kK]/g, '')
@@ -624,6 +668,14 @@ const ForecastChatPanel = ({ forecast, currentUserName, currentUser, onMarkAsRea
     return false
   }
 
+  const countRelevantMessages = (items = []) => (
+    items.reduce((count, mensaje) => {
+      if (isOwnMessage(mensaje)) return count
+      if (!messageMentionsUser(mensaje.texto, { name: senderName, email: senderEmail })) return count
+      return count + 1
+    }, 0)
+  )
+
   const formatHora = (value) => {
     if (!value) return ''
     const date = new Date(value)
@@ -690,7 +742,7 @@ const ForecastChatPanel = ({ forecast, currentUserName, currentUser, onMarkAsRea
       } else {
         const normalized = (data || []).map(mapMensaje)
         setMensajes(normalized)
-        markAsReadRef.current?.(forecastId, normalized.length)
+        markAsReadRef.current?.(forecastId, countRelevantMessages(normalized))
       }
       setLoadingMensajes(false)
     }
@@ -720,7 +772,7 @@ const ForecastChatPanel = ({ forecast, currentUserName, currentUser, onMarkAsRea
           setMensajes((prev) => {
             if (prev.some((m) => m.id === nuevo.id)) return prev
             const next = [...prev, nuevo]
-            markAsReadRef.current?.(forecastId, next.length)
+            markAsReadRef.current?.(forecastId, countRelevantMessages(next))
             return next
           })
         }
@@ -772,7 +824,7 @@ const ForecastChatPanel = ({ forecast, currentUserName, currentUser, onMarkAsRea
         const toAdd = nuevos.filter((m) => !existingIds.has(m.id))
         if (!toAdd.length) return prev
         const next = [...prev, ...toAdd]
-        markAsReadRef.current?.(forecastId, next.length)
+        markAsReadRef.current?.(forecastId, countRelevantMessages(next))
         return next
       })
     }
@@ -824,7 +876,7 @@ const ForecastChatPanel = ({ forecast, currentUserName, currentUser, onMarkAsRea
       setMensajes((prev) => {
         if (prev.some((m) => m.id === normalized.id)) return prev
         const next = [...prev, normalized]
-        markAsReadRef.current?.(forecastId, next.length)
+        markAsReadRef.current?.(forecastId, countRelevantMessages(next))
         return next
       })
       setNuevoMensaje('')
@@ -881,7 +933,7 @@ const ForecastChatPanel = ({ forecast, currentUserName, currentUser, onMarkAsRea
             }
           }}
           rows={3}
-          placeholder="Escribe un mensaje para el equipo..."
+          placeholder="Escribe un mensaje para el equipo. Usa @nombre para notificar a alguien."
           className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#45ad98]"
         />
         {errorChat ? <p className="text-xs text-red-600 mt-2">{errorChat}</p> : null}
@@ -1455,7 +1507,10 @@ const ForecastModule = ({
                 <button
                   key={forecast.id}
                   type="button"
-                  onClick={() => setSelectedForecastId(forecast.id)}
+                  onClick={() => {
+                    setSelectedForecastId(forecast.id)
+                    onMarkChatRead?.(forecast.id, forecast.chatMessagesCount || 0)
+                  }}
                   className={`w-full text-left rounded-2xl border-2 p-4 transition-all ${
                     selectedForecastId === forecast.id
                       ? 'border-[#45ad98] bg-[#45ad98]/5 shadow-md'

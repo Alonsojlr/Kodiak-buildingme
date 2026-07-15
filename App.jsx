@@ -52,6 +52,51 @@ const normalizePlainText = (value) =>
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
 
+const getMentionAliases = ({ name, email } = {}) => {
+  const aliases = new Set();
+
+  const normalizedName = normalizePlainText(name).replace(/\s+/g, ' ').trim();
+  if (normalizedName) {
+    aliases.add(normalizedName.replace(/\s+/g, ''));
+    normalizedName.split(/\s+/).forEach((part) => {
+      if (part.length >= 2) aliases.add(part);
+    });
+  }
+
+  const normalizedEmail = normalizePlainText(email).trim();
+  if (normalizedEmail) {
+    const localPart = normalizedEmail.split('@')[0] || '';
+    const compactLocal = localPart.replace(/\s+/g, '');
+    if (compactLocal) aliases.add(compactLocal);
+    localPart.split(/[._-]+/).forEach((part) => {
+      if (part.length >= 2) aliases.add(part);
+    });
+  }
+
+  return aliases;
+};
+
+const extractMentionTokens = (value) => {
+  const normalized = normalizePlainText(value);
+  const matches = normalized.match(/@([a-z0-9._-]+)/g) || [];
+  return matches.map((match) => match.slice(1)).filter(Boolean);
+};
+
+const messageMentionsUser = (message, userLike = {}) => {
+  const mentions = extractMentionTokens(message);
+  if (!mentions.length) return false;
+  const aliases = getMentionAliases(userLike);
+  if (!aliases.size) return false;
+  return mentions.some((mention) => aliases.has(mention));
+};
+
+const isOwnChatMessage = (mensaje, userLike = {}) => (
+  Boolean(
+    (userLike?.id && mensaje?.user_id && String(userLike.id) === String(mensaje.user_id)) ||
+    (userLike?.email && mensaje?.user_email && String(userLike.email).toLowerCase() === String(mensaje.user_email).toLowerCase())
+  )
+);
+
 const formatRutInput = (value) => {
   const clean = String(value || '')
     .replace(/[^0-9kK]/g, '')
@@ -68,8 +113,8 @@ const formatRutInput = (value) => {
 };
 
 const INVENTARIO_FAMILIAS = ['Televisores', 'Sillas', 'Mesas', 'Electricos', 'Varios'];
-const CHAT_READ_STATE_VERSION = 2;
-const FORECAST_CHAT_READ_STATE_VERSION = 1;
+const CHAT_READ_STATE_VERSION = 3;
+const FORECAST_CHAT_READ_STATE_VERSION = 2;
 
 const getInventarioFamilia = (item) => {
   const searchable = normalizePlainText([
@@ -6172,37 +6217,40 @@ const ProtocolosModule = ({
     const lastMessageAt = mensaje.created_at || new Date().toISOString();
     updateChatSyncTimestamp(lastMessageAt);
 
+    const isOwnMessage = isOwnChatMessage(mensaje, user);
+    const isDirectedToCurrentUser =
+      !isOwnMessage &&
+      messageMentionsUser(mensaje.mensaje, { name: user?.name, email: user?.email });
+
     const protocoloActual = protocolosRef.current.find((p) => p.id === protocoloId);
     const totalPrevio = protocoloActual?.chatMessagesCount || 0;
-    const totalSiguiente = totalPrevio + 1;
+    const totalSiguiente = isDirectedToCurrentUser ? totalPrevio + 1 : totalPrevio;
 
-    setProtocolos((prev) =>
-      prev.map((p) =>
-        p.id === protocoloId
-          ? { ...p, chatMessagesCount: (p.chatMessagesCount || 0) + 1, chatLastMessageAt: lastMessageAt }
-          : p
-      )
-    );
+    if (isDirectedToCurrentUser) {
+      setProtocolos((prev) =>
+        prev.map((p) =>
+          p.id === protocoloId
+            ? { ...p, chatMessagesCount: (p.chatMessagesCount || 0) + 1, chatLastMessageAt: lastMessageAt }
+            : p
+        )
+      );
 
-    setProtocoloSeleccionado((prev) =>
-      prev && prev.id === protocoloId
-        ? { ...prev, chatMessagesCount: (prev.chatMessagesCount || 0) + 1, chatLastMessageAt: lastMessageAt }
-        : prev
-    );
+      setProtocoloSeleccionado((prev) =>
+        prev && prev.id === protocoloId
+          ? { ...prev, chatMessagesCount: (prev.chatMessagesCount || 0) + 1, chatLastMessageAt: lastMessageAt }
+          : prev
+      );
+    }
 
-    const isOwnMessage = (
-      (user?.id && mensaje.user_id && String(user.id) === String(mensaje.user_id)) ||
-      (user?.email && mensaje.user_email && String(user.email).toLowerCase() === String(mensaje.user_email).toLowerCase())
-    );
     const isViewingThisProtocol =
       vistaActualRef.current === 'detalle' &&
       protocoloSeleccionadoRef.current?.id === protocoloId;
 
-    if (isOwnMessage || isViewingThisProtocol) {
+    if (isDirectedToCurrentUser && isViewingThisProtocol) {
       markProtocoloChatAsRead(protocoloId, totalSiguiente);
     }
 
-    if (isOwnMessage || !notify) return;
+    if (isOwnMessage || !notify || !isDirectedToCurrentUser) return;
 
     const protocoloNotificado = protocolosRef.current.find((p) => p.id === protocoloId);
     const nombreProyecto = protocoloNotificado?.nombreProyecto || `PT-${protocoloNotificado?.folio || ''}`;
@@ -6226,7 +6274,7 @@ const ProtocolosModule = ({
 
   useEffect(() => {
     loadProtocolos();
-  }, []);
+  }, [user?.id, user?.email, user?.name]);
 
   useEffect(() => {
     const channel = supabase
@@ -6245,7 +6293,7 @@ const ProtocolosModule = ({
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [user?.id, user?.email, user?.name]);
 
   useEffect(() => {
     const channel = supabase
@@ -6282,7 +6330,7 @@ const ProtocolosModule = ({
 
       const { data, error } = await supabase
         .from('protocolos_chat_mensajes')
-        .select('id, protocolo_id, user_id, user_name, user_email, created_at')
+        .select('id, protocolo_id, mensaje, user_id, user_name, user_email, created_at')
         .gt('created_at', since)
         .order('created_at', { ascending: true })
         .limit(200);
@@ -6400,12 +6448,14 @@ const ProtocolosModule = ({
       if (protocolosIds.length > 0) {
         const { data: chatData, error: chatError } = await supabase
           .from('protocolos_chat_mensajes')
-          .select('protocolo_id, created_at')
+          .select('protocolo_id, mensaje, user_id, user_email, created_at')
           .in('protocolo_id', protocolosIds);
 
         if (!chatError && Array.isArray(chatData)) {
           chatData.forEach((row) => {
             if (!row?.protocolo_id) return;
+            if (isOwnChatMessage(row, user)) return;
+            if (!messageMentionsUser(row.mensaje, { name: user?.name, email: user?.email })) return;
             const prev = chatStatsByProtocolo[row.protocolo_id] || { count: 0, lastMessageAt: null };
             const nextLast =
               !prev.lastMessageAt || (row.created_at && new Date(row.created_at) > new Date(prev.lastMessageAt))
@@ -6569,7 +6619,7 @@ const ProtocolosModule = ({
 
   useEffect(() => {
     refrescarOrdenesCompra();
-  }, []);
+  }, [user?.id, user?.email, user?.name]);
 
   useEffect(() => {
     if (!protocoloParaAbrir) return;
@@ -7553,7 +7603,7 @@ const ProtocoloChatPanel = ({ protocolo, currentUserName, currentUser }) => {
             }
           }}
           rows={3}
-          placeholder="Escribe un mensaje para el equipo..."
+          placeholder="Escribe un mensaje para el equipo. Usa @nombre para notificar a alguien."
           className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#45ad98]"
         />
         {errorChat && <p className="text-xs text-red-600 mt-2">{errorChat}</p>}
@@ -13725,24 +13775,26 @@ const Dashboard = ({ user, onLogout }) => {
 
     updateChatNotifySync(mensaje.created_at || new Date().toISOString());
 
-    setSharedProtocolos((prev) =>
-      prev.map((protocolo) =>
-        protocolo.id === mensaje.protocolo_id
-          ? {
-              ...protocolo,
-              chatMessagesCount: (protocolo.chatMessagesCount || 0) + 1,
-              chatLastMessageAt: mensaje.created_at || new Date().toISOString()
-            }
-          : protocolo
-      )
-    );
+    const isOwnMessage = isOwnChatMessage(mensaje, user);
+    const isDirectedToCurrentUser =
+      !isOwnMessage &&
+      messageMentionsUser(mensaje.mensaje, { name: user?.name, email: user?.email });
 
-    const isOwnMessage = (
-      (user?.id && mensaje.user_id && String(user.id) === String(mensaje.user_id)) ||
-      (user?.email && mensaje.user_email && String(user.email).toLowerCase() === String(mensaje.user_email).toLowerCase())
-    );
+    if (isDirectedToCurrentUser) {
+      setSharedProtocolos((prev) =>
+        prev.map((protocolo) =>
+          protocolo.id === mensaje.protocolo_id
+            ? {
+                ...protocolo,
+                chatMessagesCount: (protocolo.chatMessagesCount || 0) + 1,
+                chatLastMessageAt: mensaje.created_at || new Date().toISOString()
+              }
+            : protocolo
+        )
+      );
+    }
 
-    if (isOwnMessage) return;
+    if (isOwnMessage || !isDirectedToCurrentUser) return;
 
     const protocolo = protocolosByIdRef.current.get(mensaje.protocolo_id);
     const nombreProyecto = protocolo?.nombreProyecto || `PT-${protocolo?.folio || ''}`;
@@ -13758,36 +13810,39 @@ const Dashboard = ({ user, onLogout }) => {
 
     updateForecastChatNotifySync(mensaje.created_at || new Date().toISOString());
 
+    const isOwnMessage = isOwnChatMessage(mensaje, user);
+    const isDirectedToCurrentUser =
+      !isOwnMessage &&
+      messageMentionsUser(mensaje.mensaje, { name: user?.name, email: user?.email });
+
     const forecastActual = forecastsByIdRef.current.get(mensaje.forecast_id);
     const totalPrevio = forecastActual?.chatMessagesCount || 0;
-    const totalSiguiente = totalPrevio + 1;
+    const totalSiguiente = isDirectedToCurrentUser ? totalPrevio + 1 : totalPrevio;
 
-    setSharedForecasts((prev) =>
-      prev.map((forecast) =>
-        forecast.id === mensaje.forecast_id
-          ? {
-              ...forecast,
-              chatMessagesCount: (forecast.chatMessagesCount || 0) + 1,
-              chatLastMessageAt: mensaje.created_at || new Date().toISOString()
-            }
-          : forecast
-      )
-    );
+    if (isDirectedToCurrentUser) {
+      setSharedForecasts((prev) =>
+        prev.map((forecast) =>
+          forecast.id === mensaje.forecast_id
+            ? {
+                ...forecast,
+                chatMessagesCount: (forecast.chatMessagesCount || 0) + 1,
+                chatLastMessageAt: mensaje.created_at || new Date().toISOString()
+              }
+            : forecast
+        )
+      );
+    }
 
-    const isOwnMessage = (
-      (user?.id && mensaje.user_id && String(user.id) === String(mensaje.user_id)) ||
-      (user?.email && mensaje.user_email && String(user.email).toLowerCase() === String(mensaje.user_email).toLowerCase())
-    );
     const isViewingThisForecast =
       activeModule === 'forecast' &&
       selectedForecastContext?.id &&
       String(selectedForecastContext.id) === String(mensaje.forecast_id);
 
-    if (isOwnMessage || isViewingThisForecast) {
+    if (isDirectedToCurrentUser && isViewingThisForecast) {
       markForecastChatAsRead(mensaje.forecast_id, totalSiguiente);
     }
 
-    if (isOwnMessage) return;
+    if (isOwnMessage || !isDirectedToCurrentUser) return;
 
     const forecast = forecastsByIdRef.current.get(mensaje.forecast_id);
     const nombreProyecto = forecast?.nombreProyecto || `FW-${forecast?.numero || ''}`;
@@ -13907,12 +13962,14 @@ const Dashboard = ({ user, onLogout }) => {
         if (forecastIds.length > 0) {
           const { data: chatData, error: chatError } = await supabase
             .from('forecast_chat_mensajes')
-            .select('forecast_id, created_at')
+            .select('forecast_id, mensaje, user_id, user_email, created_at')
             .in('forecast_id', forecastIds);
 
           if (!chatError && Array.isArray(chatData)) {
             chatData.forEach((row) => {
               if (!row?.forecast_id) return;
+              if (isOwnChatMessage(row, user)) return;
+              if (!messageMentionsUser(row.mensaje, { name: user?.name, email: user?.email })) return;
               const prev = chatStatsByForecast[row.forecast_id] || { count: 0, lastMessageAt: null };
               const nextLast =
                 !prev.lastMessageAt || (row.created_at && new Date(row.created_at) > new Date(prev.lastMessageAt))
@@ -13965,7 +14022,7 @@ const Dashboard = ({ user, onLogout }) => {
 
       const { data, error } = await supabase
         .from('forecast_chat_mensajes')
-        .select('id, forecast_id, user_id, user_name, user_email, created_at')
+        .select('id, forecast_id, mensaje, user_id, user_name, user_email, created_at')
         .gt('created_at', since)
         .order('created_at', { ascending: true })
         .limit(200);
@@ -14185,12 +14242,14 @@ const Dashboard = ({ user, onLogout }) => {
         if (protocolosIds.length > 0) {
           const { data: chatData, error: chatError } = await supabase
             .from('protocolos_chat_mensajes')
-            .select('protocolo_id, created_at')
+            .select('protocolo_id, mensaje, user_id, user_email, created_at')
             .in('protocolo_id', protocolosIds);
 
           if (!chatError && Array.isArray(chatData)) {
             chatData.forEach((row) => {
               if (!row?.protocolo_id) return;
+              if (isOwnChatMessage(row, user)) return;
+              if (!messageMentionsUser(row.mensaje, { name: user?.name, email: user?.email })) return;
               const prev = chatStatsByProtocolo[row.protocolo_id] || { count: 0, lastMessageAt: null };
               const nextLast =
                 !prev.lastMessageAt || (row.created_at && new Date(row.created_at) > new Date(prev.lastMessageAt))
@@ -14578,6 +14637,8 @@ const Dashboard = ({ user, onLogout }) => {
 
         const latestByProtocolo = {};
         (data || []).forEach((mensaje) => {
+          if (isOwnChatMessage(mensaje, user)) return;
+          if (!messageMentionsUser(mensaje.mensaje, { name: user?.name, email: user?.email })) return;
           if (!mensaje?.protocolo_id || latestByProtocolo[mensaje.protocolo_id]) return;
           latestByProtocolo[mensaje.protocolo_id] = {
             lastMessageText: String(mensaje.mensaje || ''),
@@ -14632,6 +14693,8 @@ const Dashboard = ({ user, onLogout }) => {
 
         const latestByForecast = {};
         (data || []).forEach((mensaje) => {
+          if (isOwnChatMessage(mensaje, user)) return;
+          if (!messageMentionsUser(mensaje.mensaje, { name: user?.name, email: user?.email })) return;
           if (!mensaje?.forecast_id || latestByForecast[mensaje.forecast_id]) return;
           latestByForecast[mensaje.forecast_id] = {
             lastMessageText: String(mensaje.mensaje || ''),
