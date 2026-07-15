@@ -22,6 +22,7 @@ import { generarCotizacionPDF, generarOCPDF, generarProtocoloPDF } from './src/u
 import AuditoriasModule from './src/components/auditorias/AuditoriasModule';
 import { ReportesModule as InformesModule } from './src/components/reportes/ReportesModule';
 import ForecastModule from './src/components/forecast/ForecastModule';
+import { getForecasts as getForecastRecords } from './src/api/forecast';
 
 const TOAST_EVENT = 'app-toast';
 
@@ -68,6 +69,7 @@ const formatRutInput = (value) => {
 
 const INVENTARIO_FAMILIAS = ['Televisores', 'Sillas', 'Mesas', 'Electricos', 'Varios'];
 const CHAT_READ_STATE_VERSION = 2;
+const FORECAST_CHAT_READ_STATE_VERSION = 1;
 
 const getInventarioFamilia = (item) => {
   const searchable = normalizePlainText([
@@ -5973,8 +5975,12 @@ const ModalSeleccionarCotizacion = ({ cotizaciones, onClose, onSeleccionar }) =>
 
 const DropdownMensajesNoLeidos = ({
   visible,
-  protocolos = [],
+  items = [],
   loading = false,
+  title = 'Mensajes sin leer',
+  subtitle = 'Selecciona el elemento que quieres responder',
+  prefix = 'PT-',
+  entitySingular = 'protocolo',
   onClose,
   onSeleccionar
 }) => {
@@ -5998,8 +6004,8 @@ const DropdownMensajesNoLeidos = ({
       <div className="p-4 border-b" style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}>
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-bold text-white">Mensajes sin leer</h3>
-            <p className="text-xs text-white/80 mt-1">Selecciona el protocolo que quieres responder</p>
+            <h3 className="text-lg font-bold text-white">{title}</h3>
+            <p className="text-xs text-white/80 mt-1">{subtitle}</p>
           </div>
           <button onClick={onClose} className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors">
             <XCircle className="w-5 h-5" />
@@ -6013,35 +6019,35 @@ const DropdownMensajesNoLeidos = ({
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#45ad98] mx-auto mb-3"></div>
             <p className="text-gray-500 text-sm">Cargando mensajes pendientes...</p>
           </div>
-        ) : protocolos.length === 0 ? (
+        ) : items.length === 0 ? (
           <div className="text-center py-10">
             <MessageCircle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-500 text-sm">No hay mensajes sin leer.</p>
           </div>
         ) : (
-          protocolos.map((protocolo) => (
+          items.map((item) => (
             <button
-              key={protocolo.id}
+              key={item.id}
               type="button"
-              onClick={() => onSeleccionar(protocolo)}
+              onClick={() => onSeleccionar(item)}
               className="w-full text-left border border-gray-200 rounded-2xl p-4 hover:border-[#45ad98] hover:shadow-md transition-all bg-white"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <span className="font-mono font-bold text-base text-[#235250]">PT-{protocolo.folio}</span>
+                    <span className="font-mono font-bold text-base text-[#235250]">{prefix}{item.numero ?? item.folio ?? ''}</span>
                     <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-orange-100 text-orange-800">
-                      {protocolo.unreadCount} sin leer
+                      {item.unreadCount} sin leer
                     </span>
                   </div>
-                  <p className="text-sm font-semibold text-gray-800 truncate">{protocolo.nombreProyecto || 'Sin nombre de proyecto'}</p>
-                  <p className="text-xs text-gray-500 mt-1">{protocolo.cliente || 'Sin cliente'}</p>
+                  <p className="text-sm font-semibold text-gray-800 truncate">{item.nombreProyecto || 'Sin nombre de proyecto'}</p>
+                  <p className="text-xs text-gray-500 mt-1">{item.cliente || item.clienteNombre || `Sin ${entitySingular}`}</p>
                   <div className="mt-2 p-2.5 rounded-xl bg-gray-50 border border-gray-100">
                     <p className="text-[11px] font-semibold text-gray-600 mb-1">
-                      {protocolo.lastMessageUser || 'Usuario'} · {formatFechaHora(protocolo.lastMessageAt)}
+                      {item.lastMessageUser || 'Usuario'} · {formatFechaHora(item.lastMessageAt)}
                     </p>
                     <p className="text-xs text-gray-700 line-clamp-2">
-                      {protocolo.lastMessageText || 'Sin vista previa del mensaje'}
+                      {item.lastMessageText || 'Sin vista previa del mensaje'}
                     </p>
                   </div>
                 </div>
@@ -13533,19 +13539,30 @@ const Dashboard = ({ user, onLogout }) => {
 
   // ===== ESTADOS COMPARTIDOS ENTRE MÓDULOS =====
   const [sharedCotizaciones, setSharedCotizaciones] = useState([]);
+  const [sharedForecasts, setSharedForecasts] = useState([]);
   const [sharedProtocolos, setSharedProtocolos] = useState([]);
   const [sharedOrdenesCompra, setSharedOrdenesCompra] = useState([]);
   const chatReadStorageKey = `protocolos.chatReadState.${String(user?.id || user?.email || 'anon').toLowerCase()}`;
+  const forecastChatReadStorageKey = `forecasts.chatReadState.${String(user?.id || user?.email || 'anon').toLowerCase()}`;
   const [sharedChatReadState, setSharedChatReadState] = useState({});
+  const [sharedForecastChatReadState, setSharedForecastChatReadState] = useState({});
   const [showUnreadChatDropdown, setShowUnreadChatDropdown] = useState(false);
+  const [showUnreadForecastChatDropdown, setShowUnreadForecastChatDropdown] = useState(false);
   const [loadingUnreadChatSummaries, setLoadingUnreadChatSummaries] = useState(false);
+  const [loadingUnreadForecastChatSummaries, setLoadingUnreadForecastChatSummaries] = useState(false);
   const [unreadChatSummaries, setUnreadChatSummaries] = useState({});
+  const [unreadForecastChatSummaries, setUnreadForecastChatSummaries] = useState({});
   const [cotizacionParaAbrir, setCotizacionParaAbrir] = useState(null);
   const [datosPreOC, setDatosPreOC] = useState(null);
   const [protocoloParaAbrir, setProtocoloParaAbrir] = useState(null);
+  const [forecastParaAbrir, setForecastParaAbrir] = useState(null);
+  const [selectedForecastContext, setSelectedForecastContext] = useState(null);
   const chatNotifyProcessedIdsRef = useRef(new Set());
   const chatNotifyLastSyncRef = useRef(new Date().toISOString());
+  const forecastChatNotifyProcessedIdsRef = useRef(new Set());
+  const forecastChatNotifyLastSyncRef = useRef(new Date().toISOString());
   const protocolosByIdRef = useRef(new Map());
+  const forecastsByIdRef = useRef(new Map());
 
   useEffect(() => {
     const byId = new Map();
@@ -13554,6 +13571,14 @@ const Dashboard = ({ user, onLogout }) => {
     });
     protocolosByIdRef.current = byId;
   }, [sharedProtocolos]);
+
+  useEffect(() => {
+    const byId = new Map();
+    sharedForecasts.forEach((forecast) => {
+      if (forecast?.id) byId.set(forecast.id, forecast);
+    });
+    forecastsByIdRef.current = byId;
+  }, [sharedForecasts]);
 
   useEffect(() => {
     try {
@@ -13569,6 +13594,21 @@ const Dashboard = ({ user, onLogout }) => {
       setSharedChatReadState({});
     }
   }, [chatReadStorageKey]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(forecastChatReadStorageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        setSharedForecastChatReadState(parsed && typeof parsed === 'object' ? parsed : {});
+      } else {
+        setSharedForecastChatReadState({});
+      }
+    } catch (error) {
+      console.error('Error cargando estado global de lectura de chat de forecast:', error);
+      setSharedForecastChatReadState({});
+    }
+  }, [forecastChatReadStorageKey]);
 
   useEffect(() => {
     if (sharedProtocolos.length === 0) return;
@@ -13588,12 +13628,37 @@ const Dashboard = ({ user, onLogout }) => {
   }, [sharedProtocolos, sharedChatReadState?.__version]);
 
   useEffect(() => {
+    if (sharedForecasts.length === 0) return;
+    const currentVersion = sharedForecastChatReadState?.__version;
+    if (currentVersion === FORECAST_CHAT_READ_STATE_VERSION) return;
+
+    setSharedForecastChatReadState(() => {
+      const migrated = { __version: FORECAST_CHAT_READ_STATE_VERSION };
+      sharedForecasts.forEach((forecast) => {
+        migrated[forecast.id] = {
+          readCount: Math.max(0, Number(forecast.chatMessagesCount) || 0),
+          readAt: new Date().toISOString()
+        };
+      });
+      return migrated;
+    });
+  }, [sharedForecasts, sharedForecastChatReadState?.__version]);
+
+  useEffect(() => {
     try {
       localStorage.setItem(chatReadStorageKey, JSON.stringify(sharedChatReadState));
     } catch (error) {
       console.error('Error guardando estado global de lectura de chat:', error);
     }
   }, [chatReadStorageKey, sharedChatReadState]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(forecastChatReadStorageKey, JSON.stringify(sharedForecastChatReadState));
+    } catch (error) {
+      console.error('Error guardando estado global de lectura de chat de forecast:', error);
+    }
+  }, [forecastChatReadStorageKey, sharedForecastChatReadState]);
 
   const registerProcessedChatNotify = (messageId) => {
     if (!messageId) return false;
@@ -13615,6 +13680,39 @@ const Dashboard = ({ user, onLogout }) => {
     if (!prev || next > prev) {
       chatNotifyLastSyncRef.current = isoDate;
     }
+  };
+
+  const registerProcessedForecastChatNotify = (messageId) => {
+    if (!messageId) return false;
+    const ids = forecastChatNotifyProcessedIdsRef.current;
+    if (ids.has(messageId)) return true;
+    ids.add(messageId);
+    if (ids.size > 2000) {
+      const keep = Array.from(ids).slice(-1200);
+      forecastChatNotifyProcessedIdsRef.current = new Set(keep);
+    }
+    return false;
+  };
+
+  const updateForecastChatNotifySync = (isoDate) => {
+    if (!isoDate) return;
+    const next = new Date(isoDate).getTime();
+    if (Number.isNaN(next)) return;
+    const prev = forecastChatNotifyLastSyncRef.current ? new Date(forecastChatNotifyLastSyncRef.current).getTime() : null;
+    if (!prev || next > prev) {
+      forecastChatNotifyLastSyncRef.current = isoDate;
+    }
+  };
+
+  const markForecastChatAsRead = (forecastId, totalCount = 0) => {
+    if (!forecastId) return;
+    setSharedForecastChatReadState((prev) => ({
+      ...prev,
+      [forecastId]: {
+        readCount: Math.max(0, Number(totalCount) || 0),
+        readAt: new Date().toISOString()
+      }
+    }));
   };
 
   const notifyIncomingChatMessage = (mensaje) => {
@@ -13647,6 +13745,51 @@ const Dashboard = ({ user, onLogout }) => {
     const remitente = String(mensaje.user_name || mensaje.user_email || 'Usuario');
 
     notifyToast(`Mensaje de ${remitente} en ${nombreProyecto || 'proyecto'}`, 'info');
+    playNotificationSound();
+  };
+
+  const notifyIncomingForecastChatMessage = (mensaje) => {
+    if (!mensaje?.id || !mensaje?.forecast_id) return;
+    if (registerProcessedForecastChatNotify(mensaje.id)) return;
+
+    updateForecastChatNotifySync(mensaje.created_at || new Date().toISOString());
+
+    const forecastActual = forecastsByIdRef.current.get(mensaje.forecast_id);
+    const totalPrevio = forecastActual?.chatMessagesCount || 0;
+    const totalSiguiente = totalPrevio + 1;
+
+    setSharedForecasts((prev) =>
+      prev.map((forecast) =>
+        forecast.id === mensaje.forecast_id
+          ? {
+              ...forecast,
+              chatMessagesCount: (forecast.chatMessagesCount || 0) + 1,
+              chatLastMessageAt: mensaje.created_at || new Date().toISOString()
+            }
+          : forecast
+      )
+    );
+
+    const isOwnMessage = (
+      (user?.id && mensaje.user_id && String(user.id) === String(mensaje.user_id)) ||
+      (user?.email && mensaje.user_email && String(user.email).toLowerCase() === String(mensaje.user_email).toLowerCase())
+    );
+    const isViewingThisForecast =
+      activeModule === 'forecast' &&
+      selectedForecastContext?.id &&
+      String(selectedForecastContext.id) === String(mensaje.forecast_id);
+
+    if (isOwnMessage || isViewingThisForecast) {
+      markForecastChatAsRead(mensaje.forecast_id, totalSiguiente);
+    }
+
+    if (isOwnMessage) return;
+
+    const forecast = forecastsByIdRef.current.get(mensaje.forecast_id);
+    const nombreProyecto = forecast?.nombreProyecto || `FW-${forecast?.numero || ''}`;
+    const remitente = String(mensaje.user_name || mensaje.user_email || 'Usuario');
+
+    notifyToast(`Mensaje de ${remitente} en Forecast ${nombreProyecto || ''}`.trim(), 'info');
     playNotificationSound();
   };
 
@@ -13710,6 +13853,139 @@ const Dashboard = ({ user, onLogout }) => {
       clearInterval(intervalId);
     };
   }, [user?.id, user?.email]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('global-forecast-chat-notify')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'forecast_chat_mensajes'
+        },
+        (payload) => {
+          notifyIncomingForecastChatMessage(payload.new || {});
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('Realtime global de chat de forecast con problemas, activando fallback por polling.');
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, user?.email, activeModule, selectedForecastContext?.id]);
+
+  useEffect(() => {
+    const mapForecastSummary = (forecastRows = [], chatStatsByForecast = {}) => (
+      forecastRows.map((forecast) => ({
+        id: forecast.id,
+        numero: forecast.numero,
+        clienteNombre: forecast.clientes?.razon_social || forecast.nombre_cliente || 'Sin cliente',
+        cliente: forecast.clientes?.razon_social || forecast.nombre_cliente || 'Sin cliente',
+        nombreProyecto: forecast.nombre_proyecto || '',
+        etapaActual: forecast.etapa_actual || 'Brief',
+        estado: forecast.estado || 'Activo',
+        chatMessagesCount: chatStatsByForecast[forecast.id]?.count || 0,
+        chatLastMessageAt: chatStatsByForecast[forecast.id]?.lastMessageAt || null
+      }))
+    );
+
+    const loadSharedForecasts = async () => {
+      try {
+        const forecastData = await getForecastRecords();
+        const forecastIds = (forecastData || []).map((forecast) => forecast.id).filter(Boolean);
+        const chatStatsByForecast = {};
+
+        if (forecastIds.length > 0) {
+          const { data: chatData, error: chatError } = await supabase
+            .from('forecast_chat_mensajes')
+            .select('forecast_id, created_at')
+            .in('forecast_id', forecastIds);
+
+          if (!chatError && Array.isArray(chatData)) {
+            chatData.forEach((row) => {
+              if (!row?.forecast_id) return;
+              const prev = chatStatsByForecast[row.forecast_id] || { count: 0, lastMessageAt: null };
+              const nextLast =
+                !prev.lastMessageAt || (row.created_at && new Date(row.created_at) > new Date(prev.lastMessageAt))
+                  ? row.created_at
+                  : prev.lastMessageAt;
+              chatStatsByForecast[row.forecast_id] = {
+                count: prev.count + 1,
+                lastMessageAt: nextLast
+              };
+            });
+          } else if (chatError && chatError.code !== '42P01') {
+            console.error('Error cargando conteo global de chat de forecast:', chatError);
+          }
+        }
+
+        const mapped = mapForecastSummary(forecastData || [], chatStatsByForecast);
+        const latestChatAt = mapped.reduce((latest, forecast) => {
+          if (!forecast.chatLastMessageAt) return latest;
+          if (!latest) return forecast.chatLastMessageAt;
+          return new Date(forecast.chatLastMessageAt) > new Date(latest) ? forecast.chatLastMessageAt : latest;
+        }, null);
+        forecastChatNotifyLastSyncRef.current = latestChatAt || new Date().toISOString();
+        setSharedForecasts(mapped);
+      } catch (error) {
+        console.error('Error cargando forecast compartidos:', error);
+      }
+    };
+
+    loadSharedForecasts();
+
+    const channel = supabase
+      .channel('forecasts-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'forecasts' }, () => {
+        loadSharedForecasts();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const pollForecastChatNotifications = async () => {
+      if (cancelled) return;
+      const since = forecastChatNotifyLastSyncRef.current;
+      if (!since) return;
+
+      const { data, error } = await supabase
+        .from('forecast_chat_mensajes')
+        .select('id, forecast_id, user_id, user_name, user_email, created_at')
+        .gt('created_at', since)
+        .order('created_at', { ascending: true })
+        .limit(200);
+
+      if (error) {
+        if (error.code !== '42P01') {
+          console.error('Error en polling global de notificaciones de chat de forecast:', error);
+        }
+        return;
+      }
+
+      if (!Array.isArray(data) || data.length === 0) return;
+
+      data.forEach((mensaje) => notifyIncomingForecastChatMessage(mensaje));
+    };
+
+    const intervalId = setInterval(pollForecastChatNotifications, 5000);
+    pollForecastChatNotifications();
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [user?.id, user?.email, activeModule, selectedForecastContext?.id]);
 
   const calcularNetoCotizacion = (cot) => {
     // Si ya tiene neto, usarlo directamente
@@ -14192,12 +14468,38 @@ const Dashboard = ({ user, onLogout }) => {
     () => protocolosNoLeidos.reduce((count, protocolo) => count + (protocolo.unreadCount || 0), 0),
     [protocolosNoLeidos]
   );
+  const forecastsNoLeidos = useMemo(() => (
+    sharedForecasts
+      .map((forecast) => {
+        const readCount = sharedForecastChatReadState?.[forecast.id]?.readCount || 0;
+        const unreadCount = Math.max(0, (forecast.chatMessagesCount || 0) - readCount);
+        return unreadCount > 0 ? { ...forecast, unreadCount } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => new Date(b.chatLastMessageAt || 0) - new Date(a.chatLastMessageAt || 0))
+  ), [sharedForecasts, sharedForecastChatReadState]);
+  const forecastsConMensajesSinLeer = useMemo(
+    () => forecastsNoLeidos.length,
+    [forecastsNoLeidos]
+  );
+  const totalMensajesForecastSinLeer = useMemo(
+    () => forecastsNoLeidos.reduce((count, forecast) => count + (forecast.unreadCount || 0), 0),
+    [forecastsNoLeidos]
+  );
 
   const abrirProtocoloDesdeMensajes = (protocolo) => {
     if (!protocolo) return;
     setShowUnreadChatDropdown(false);
     setProtocoloParaAbrir({ ...protocolo });
     setActiveModule('protocolos');
+  };
+
+  const abrirForecastDesdeMensajes = (forecast) => {
+    if (!forecast) return;
+    setShowUnreadForecastChatDropdown(false);
+    markForecastChatAsRead(forecast.id, forecast.chatMessagesCount || 0);
+    setForecastParaAbrir({ id: forecast.id, numero: forecast.numero });
+    setActiveModule('forecast');
   };
 
   const abrirCotizacionDesdeForecast = (cotizacionId) => {
@@ -14220,6 +14522,15 @@ const Dashboard = ({ user, onLogout }) => {
     }
     setProtocoloParaAbrir({ id: protocolo.id, folio: protocolo.folio });
     setActiveModule('protocolos');
+  };
+
+  const handleHeaderForecastChatAlertClick = () => {
+    if (forecastsNoLeidos.length === 0) return;
+    if (forecastsNoLeidos.length === 1) {
+      abrirForecastDesdeMensajes(forecastsNoLeidos[0]);
+      return;
+    }
+    setShowUnreadForecastChatDropdown((prev) => !prev);
   };
 
   const handleHeaderChatAlertClick = () => {
@@ -14286,8 +14597,71 @@ const Dashboard = ({ user, onLogout }) => {
   }, [showUnreadChatDropdown, protocolosNoLeidos]);
 
   useEffect(() => {
+    if (!showUnreadForecastChatDropdown) return;
+
+    const forecastIds = forecastsNoLeidos.map((forecast) => forecast.id).filter(Boolean);
+    if (!forecastIds.length) {
+      setUnreadForecastChatSummaries({});
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadUnreadForecastChatSummaries = async () => {
+      try {
+        setLoadingUnreadForecastChatSummaries(true);
+        const { data, error } = await supabase
+          .from('forecast_chat_mensajes')
+          .select('id, forecast_id, mensaje, user_name, user_email, created_at')
+          .in('forecast_id', forecastIds)
+          .order('created_at', { ascending: false });
+
+        if (cancelled) return;
+
+        if (error) {
+          if (error.code !== '42P01') {
+            console.error('Error cargando resumen de mensajes no leidos de forecast:', error);
+          }
+          setUnreadForecastChatSummaries({});
+          return;
+        }
+
+        const latestByForecast = {};
+        (data || []).forEach((mensaje) => {
+          if (!mensaje?.forecast_id || latestByForecast[mensaje.forecast_id]) return;
+          latestByForecast[mensaje.forecast_id] = {
+            lastMessageText: String(mensaje.mensaje || ''),
+            lastMessageUser: String(mensaje.user_name || mensaje.user_email || 'Usuario'),
+            lastMessageAt: mensaje.created_at || null
+          };
+        });
+        setUnreadForecastChatSummaries(latestByForecast);
+      } finally {
+        if (!cancelled) {
+          setLoadingUnreadForecastChatSummaries(false);
+        }
+      }
+    };
+
+    loadUnreadForecastChatSummaries();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showUnreadForecastChatDropdown, forecastsNoLeidos]);
+
+  useEffect(() => {
     setShowUnreadChatDropdown(false);
+    setShowUnreadForecastChatDropdown(false);
+    if (activeModule !== 'forecast') {
+      setSelectedForecastContext(null);
+    }
   }, [activeModule]);
+
+  useEffect(() => {
+    if (!selectedForecastContext?.id) return;
+    markForecastChatAsRead(selectedForecastContext.id, selectedForecastContext.chatMessagesCount || 0);
+  }, [selectedForecastContext?.id, selectedForecastContext?.chatMessagesCount]);
 
   // Permisos por rol
   const hasAccess = (module) => {
@@ -14367,7 +14741,7 @@ const Dashboard = ({ user, onLogout }) => {
                     </div>
                     <div className="text-left">
                       <p className="text-sm font-bold leading-tight text-white">
-                        Tienes {totalMensajesSinLeer} mensaje{totalMensajesSinLeer === 1 ? '' : 's'} sin leer
+                        Tienes {totalMensajesSinLeer} mensaje{totalMensajesSinLeer === 1 ? '' : 's'} en Protocolos
                       </p>
                       <p className="text-xs text-white/75">
                         {protocolosConMensajesSinLeer} protocolo{protocolosConMensajesSinLeer === 1 ? '' : 's'} con chat pendiente
@@ -14378,12 +14752,56 @@ const Dashboard = ({ user, onLogout }) => {
                   <DropdownMensajesNoLeidos
                     visible={showUnreadChatDropdown && protocolosNoLeidos.length > 1}
                     loading={loadingUnreadChatSummaries}
-                    protocolos={protocolosNoLeidos.map((protocolo) => ({
+                    title="Mensajes sin leer en Protocolos"
+                    subtitle="Selecciona el protocolo que quieres responder"
+                    prefix="PT-"
+                    entitySingular="protocolo"
+                    items={protocolosNoLeidos.map((protocolo) => ({
                       ...protocolo,
                       ...unreadChatSummaries[protocolo.id]
                     }))}
                     onClose={() => setShowUnreadChatDropdown(false)}
                     onSeleccionar={abrirProtocoloDesdeMensajes}
+                  />
+                </div>
+              )}
+              {hasAccess('forecast') && totalMensajesForecastSinLeer > 0 && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={handleHeaderForecastChatAlertClick}
+                    className="group flex items-center gap-3 rounded-2xl border border-white/20 bg-white/12 px-4 py-2 shadow-lg backdrop-blur-md transition-all hover:bg-white/18 hover:shadow-xl"
+                    title="Ver mensajes pendientes de Forecast"
+                  >
+                    <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white/20">
+                      <MessageCircle className="h-5 w-5 text-white" />
+                      <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#f97316] px-1 text-[11px] font-bold text-white">
+                        {totalMensajesForecastSinLeer}
+                      </span>
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-bold leading-tight text-white">
+                        Tienes {totalMensajesForecastSinLeer} mensaje{totalMensajesForecastSinLeer === 1 ? '' : 's'} en Forecast
+                      </p>
+                      <p className="text-xs text-white/75">
+                        {forecastsConMensajesSinLeer} forecast{forecastsConMensajesSinLeer === 1 ? '' : 's'} con chat pendiente
+                      </p>
+                    </div>
+                  </button>
+
+                  <DropdownMensajesNoLeidos
+                    visible={showUnreadForecastChatDropdown && forecastsNoLeidos.length > 1}
+                    loading={loadingUnreadForecastChatSummaries}
+                    title="Mensajes sin leer en Forecast"
+                    subtitle="Selecciona el forecast que quieres responder"
+                    prefix="FW-"
+                    entitySingular="forecast"
+                    items={forecastsNoLeidos.map((forecast) => ({
+                      ...forecast,
+                      ...unreadForecastChatSummaries[forecast.id]
+                    }))}
+                    onClose={() => setShowUnreadForecastChatDropdown(false)}
+                    onSeleccionar={abrirForecastDesdeMensajes}
                   />
                 </div>
               )}
@@ -14660,9 +15078,15 @@ const Dashboard = ({ user, onLogout }) => {
           {activeModule === 'forecast' && hasAccess('forecast') && (
             <ForecastModule
               activeModule={activeModule}
+              sharedForecasts={sharedForecasts}
               sharedCotizaciones={sharedCotizaciones}
               sharedProtocolos={sharedProtocolos}
               currentUserName={user?.name}
+              currentUser={user}
+              forecastParaAbrir={forecastParaAbrir}
+              onLimpiarForecastParaAbrir={() => setForecastParaAbrir(null)}
+              onSelectForecast={(forecast) => setSelectedForecastContext(forecast || null)}
+              onMarkChatRead={markForecastChatAsRead}
               onOpenCotizacion={abrirCotizacionDesdeForecast}
               onOpenProtocolo={abrirProtocoloDesdeForecast}
             />

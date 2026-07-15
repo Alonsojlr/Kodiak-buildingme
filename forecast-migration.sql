@@ -56,12 +56,24 @@ CREATE TABLE IF NOT EXISTS forecast_hitos (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS forecast_chat_mensajes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  forecast_id UUID NOT NULL REFERENCES forecasts(id) ON DELETE CASCADE,
+  mensaje TEXT NOT NULL,
+  user_id UUID NULL,
+  user_name TEXT,
+  user_email TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_forecasts_etapa_actual ON forecasts(etapa_actual);
 CREATE INDEX IF NOT EXISTS idx_forecasts_cliente_id ON forecasts(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_forecasts_cotizacion_id ON forecasts(cotizacion_id);
 CREATE INDEX IF NOT EXISTS idx_forecasts_protocolo_id ON forecasts(protocolo_id);
 CREATE INDEX IF NOT EXISTS idx_forecast_documentos_forecast_id ON forecast_documentos(forecast_id);
 CREATE INDEX IF NOT EXISTS idx_forecast_hitos_forecast_id ON forecast_hitos(forecast_id);
+CREATE INDEX IF NOT EXISTS idx_forecast_chat_mensajes_forecast_id ON forecast_chat_mensajes(forecast_id);
+CREATE INDEX IF NOT EXISTS idx_forecast_chat_mensajes_created_at ON forecast_chat_mensajes(created_at);
 
 CREATE OR REPLACE FUNCTION set_forecasts_updated_at()
 RETURNS TRIGGER AS $$
@@ -86,10 +98,12 @@ EXECUTE FUNCTION set_forecasts_updated_at();
 COMMENT ON TABLE forecasts IS 'Seguimiento previo del proyecto desde brief hasta pasar a protocolo';
 COMMENT ON TABLE forecast_documentos IS 'Archivos y enlaces asociados a las etapas del forecast';
 COMMENT ON TABLE forecast_hitos IS 'Fechas clave, entregables y tareas del forecast';
+COMMENT ON TABLE forecast_chat_mensajes IS 'Chat interno asociado a cada forecast';
 
 ALTER TABLE forecasts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE forecast_documentos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE forecast_hitos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE forecast_chat_mensajes ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Authenticated full access" ON forecasts;
 CREATE POLICY "Authenticated full access" ON forecasts
@@ -105,6 +119,12 @@ WITH CHECK (auth.uid() IS NOT NULL);
 
 DROP POLICY IF EXISTS "Authenticated full access" ON forecast_hitos;
 CREATE POLICY "Authenticated full access" ON forecast_hitos
+FOR ALL TO authenticated
+USING (auth.uid() IS NOT NULL)
+WITH CHECK (auth.uid() IS NOT NULL);
+
+DROP POLICY IF EXISTS "Authenticated full access" ON forecast_chat_mensajes;
+CREATE POLICY "Authenticated full access" ON forecast_chat_mensajes
 FOR ALL TO authenticated
 USING (auth.uid() IS NOT NULL)
 WITH CHECK (auth.uid() IS NOT NULL);
