@@ -11632,7 +11632,8 @@ const [showNewModal, setShowNewModal] = useState(false);
     titulo: '',
     url: ''
   });
-  const canEditDeleteCotizaciones = user?.role !== 'comercial';
+  const canEditCotizaciones = ['admin', 'comercial', 'finanzas'].includes(user?.role);
+  const canDeleteCotizaciones = user?.role !== 'comercial';
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('es-CL', {
@@ -12098,7 +12099,7 @@ const [showNewModal, setShowNewModal] = useState(false);
                       >
                         <FileText className="w-4 h-4 text-gray-600" />
                       </button>
-                      {canEditDeleteCotizaciones && (
+                      {canEditCotizaciones && (
                         <button
                           onClick={() => {
                             setCotizacionSeleccionada(cot);
@@ -12118,7 +12119,7 @@ const [showNewModal, setShowNewModal] = useState(false);
                       >
                         <Download className="w-4 h-4 text-blue-600" />
                       </button>
-                      {canEditDeleteCotizaciones && (
+                      {canDeleteCotizaciones && (
                         <button
                           onClick={() => setConfirmDeleteCot(cot)}
                           className="p-2 bg-red-100 hover:bg-red-200 rounded-lg transition-colors"
@@ -12274,7 +12275,7 @@ const [showNewModal, setShowNewModal] = useState(false);
       )}
       
       {/* Modal Editar */}
-      {showEditModal && cotizacionSeleccionada && canEditDeleteCotizaciones && (
+      {showEditModal && cotizacionSeleccionada && canEditCotizaciones && (
         <EditarCotizacionModal
           cotizacion={cotizacionSeleccionada}
           onClose={() => {
@@ -12282,8 +12283,8 @@ const [showNewModal, setShowNewModal] = useState(false);
             setCotizacionSeleccionada(null);
           }}
           onSave={async (updates) => {
-            if (!canEditDeleteCotizaciones) {
-              alert('El rol Comercial no puede editar cotizaciones.');
+            if (!canEditCotizaciones) {
+              alert('Este rol no puede editar cotizaciones.');
               return;
             }
             try {
@@ -14428,7 +14429,38 @@ const Dashboard = ({ user, onLogout }) => {
     };
 
     loadSharedData();
-  }, []);
+    const channel = supabase
+      .channel('dashboard-shared-data-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cotizaciones' }, () => {
+        loadSharedData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'protocolos' }, () => {
+        loadSharedData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'protocolos_facturas' }, () => {
+        loadSharedData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes_compra' }, () => {
+        loadSharedData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes_compra_items' }, () => {
+        loadSharedData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes_compra_facturas' }, () => {
+        loadSharedData();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'proveedores' }, () => {
+        loadSharedData();
+      })
+      .subscribe();
+
+    const intervalId = setInterval(loadSharedData, 60000);
+
+    return () => {
+      clearInterval(intervalId);
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, user?.email, user?.name]);
 
  // Handlers para comunicación entre módulos
   const handleAdjudicarVentaDesdeCotizacion = async (cotizacion) => {

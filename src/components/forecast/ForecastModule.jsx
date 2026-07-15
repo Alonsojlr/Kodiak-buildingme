@@ -1140,6 +1140,32 @@ const ForecastModule = ({
   }, [activeModule])
 
   useEffect(() => {
+    if (activeModule !== 'forecast') return undefined
+
+    const channel = supabase
+      .channel('forecast-module-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'forecasts' }, () => {
+        loadForecastData()
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'forecast_documentos' }, () => {
+        loadForecastData()
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'forecast_hitos' }, () => {
+        loadForecastData()
+      })
+      .subscribe()
+
+    const intervalId = setInterval(() => {
+      loadForecastData()
+    }, 60000)
+
+    return () => {
+      clearInterval(intervalId)
+      supabase.removeChannel(channel)
+    }
+  }, [activeModule, currentUser?.id, currentUser?.email])
+
+  useEffect(() => {
     if (!selectedForecast) return
     setLinkSelection({
       clienteId: selectedForecast.clienteId || '',
