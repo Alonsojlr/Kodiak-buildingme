@@ -2013,7 +2013,7 @@ const ForecastModule = ({
                             rel="noreferrer"
                             className="px-3 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-sm font-semibold text-gray-700"
                           >
-                            Editar link
+                            Ver link
                           </a>
                         ) : null}
                         {documento.archivoUrl ? (
