@@ -943,6 +943,10 @@ const ForecastModule = ({
     cotizacionId: '',
     protocoloId: ''
   })
+  const isDisenoRole = String(currentUser?.role || '').toLowerCase() === 'diseno'
+  const canEditForecastLinks = !isDisenoRole
+  const canOpenLinkedCotizacion = !isDisenoRole && typeof onOpenCotizacion === 'function'
+  const canOpenLinkedProtocolo = !isDisenoRole && typeof onOpenProtocolo === 'function'
 
   const selectedForecast = useMemo(
     () => forecasts.find((item) => item.id === selectedForecastId) || null,
@@ -1616,6 +1620,7 @@ const ForecastModule = ({
                     <select
                       value={linkSelection.cotizacionId}
                       onChange={(e) => setLinkSelection((prev) => ({ ...prev, cotizacionId: e.target.value }))}
+                      disabled={!canEditForecastLinks}
                       className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98] bg-white"
                     >
                       <option value="">Sin vincular</option>
@@ -1626,15 +1631,17 @@ const ForecastModule = ({
                       ))}
                     </select>
                     <div className="flex gap-3 mt-3">
-                      <button
-                        type="button"
-                        onClick={handleSaveLinks}
-                        className="px-4 py-2 rounded-xl text-white font-semibold"
-                        style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
-                      >
-                        Guardar
-                      </button>
-                      {selectedForecast.cotizacionId && (
+                      {canEditForecastLinks && (
+                        <button
+                          type="button"
+                          onClick={handleSaveLinks}
+                          className="px-4 py-2 rounded-xl text-white font-semibold"
+                          style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
+                        >
+                          Guardar
+                        </button>
+                      )}
+                      {selectedForecast.cotizacionId && canOpenLinkedCotizacion && (
                         <button
                           type="button"
                           onClick={() => onOpenCotizacion?.(selectedForecast.cotizacionId)}
@@ -1644,12 +1651,16 @@ const ForecastModule = ({
                         </button>
                       )}
                     </div>
+                    {!canEditForecastLinks && (
+                      <p className="text-xs text-gray-500 mt-3">Visible solo para consulta.</p>
+                    )}
                   </div>
                   <div className="border border-gray-200 rounded-2xl p-4">
                     <p className="text-sm font-semibold text-gray-700 mb-2">Protocolo</p>
                     <select
                       value={linkSelection.protocoloId}
                       onChange={(e) => setLinkSelection((prev) => ({ ...prev, protocoloId: e.target.value }))}
+                      disabled={!canEditForecastLinks}
                       className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98] bg-white"
                     >
                       <option value="">Sin vincular</option>
@@ -1660,15 +1671,17 @@ const ForecastModule = ({
                       ))}
                     </select>
                     <div className="flex gap-3 mt-3">
-                      <button
-                        type="button"
-                        onClick={handleSaveLinks}
-                        className="px-4 py-2 rounded-xl text-white font-semibold"
-                        style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
-                      >
-                        Guardar
-                      </button>
-                      {selectedForecast.protocoloId && (
+                      {canEditForecastLinks && (
+                        <button
+                          type="button"
+                          onClick={handleSaveLinks}
+                          className="px-4 py-2 rounded-xl text-white font-semibold"
+                          style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
+                        >
+                          Guardar
+                        </button>
+                      )}
+                      {selectedForecast.protocoloId && canOpenLinkedProtocolo && (
                         <button
                           type="button"
                           onClick={() => onOpenProtocolo?.(selectedForecast.protocoloId)}
@@ -1678,6 +1691,9 @@ const ForecastModule = ({
                         </button>
                       )}
                     </div>
+                    {!canEditForecastLinks && (
+                      <p className="text-xs text-gray-500 mt-3">Visible solo para consulta.</p>
+                    )}
                   </div>
                 </div>
               </div>

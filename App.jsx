@@ -14672,7 +14672,7 @@ const Dashboard = ({ user, onLogout }) => {
     if (isAdminLike) return true;
     if (module === 'administracion' && canAccessAdministracion) return true;
     if (user.role === 'compras' && ['forecast', 'protocolos', 'gantt', 'ordenes', 'proveedores', 'inventario', 'auditorias'].includes(module)) return true;
-    if (user.role === 'diseno' && ['forecast', 'protocolos', 'gantt', 'proveedores', 'inventario', 'clientes'].includes(module)) return true;
+    if (user.role === 'diseno' && ['forecast', 'gantt', 'proveedores', 'inventario', 'clientes'].includes(module)) return true;
     if (user.role === 'finanzas' && ['cotizaciones', 'clientes', 'facturacion'].includes(module)) return true;
     if (['auditor', 'trade_marketing'].includes(user.role) && module === 'auditorias') return true;
     return false;
@@ -14688,7 +14688,7 @@ const Dashboard = ({ user, onLogout }) => {
     { id: 'dashboard', name: 'Dashboard', icon: BarChart3, roles: ['admin', 'comercial', 'finanzas'] },
     { id: 'forecast', name: 'Forecast', icon: Clock, roles: ['admin', 'comercial', 'compras', 'diseno'] },
     { id: 'cotizaciones', name: 'Cotizaciones', icon: FileText, roles: ['admin', 'comercial', 'finanzas'] },
-    { id: 'protocolos', name: 'Protocolos de Compra', icon: Package, roles: ['admin', 'comercial', 'compras', 'diseno'] },
+    { id: 'protocolos', name: 'Protocolos de Compra', icon: Package, roles: ['admin', 'comercial', 'compras'] },
     { id: 'gantt', name: 'Carta Gantt', icon: Calendar, roles: ['admin', 'comercial', 'compras', 'diseno'] },
     { id: 'ordenes', name: 'Órdenes de Compra', icon: ShoppingCart, roles: ['admin', 'comercial', 'compras'] },
     { id: 'inventario', name: 'Bodega/Inventario', icon: Package, roles: ['admin', 'comercial', 'compras', 'diseno'] },
