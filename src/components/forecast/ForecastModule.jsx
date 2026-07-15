@@ -41,6 +41,15 @@ const notifyToast = (message, type = 'success') => {
   window.dispatchEvent(new CustomEvent(TOAST_EVENT, { detail: { message, type } }))
 }
 
+const getErrorMessage = (error, fallback) => {
+  if (!error) return fallback
+  if (typeof error === 'string') return error
+  if (typeof error?.message === 'string' && error.message.trim()) return error.message.trim()
+  if (typeof error?.error_description === 'string' && error.error_description.trim()) return error.error_description.trim()
+  if (typeof error?.details === 'string' && error.details.trim()) return error.details.trim()
+  return fallback
+}
+
 const sanitizeStorageFileName = (name) =>
   String(name || 'documento')
     .normalize('NFD')
@@ -1091,6 +1100,7 @@ const ForecastModule = ({
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStage, setFilterStage] = useState('todos')
   const [previewDocumento, setPreviewDocumento] = useState(null)
+  const [guardandoDocumento, setGuardandoDocumento] = useState(false)
   const [documentForm, setDocumentForm] = useState({
     etapa: 'Brief',
     tipo: 'Brief',
@@ -1220,6 +1230,8 @@ const ForecastModule = ({
         editUrl: documento.edit_url || '',
         comentarios: documento.comentarios || '',
         createdAt: documento.created_at || null
+        ,
+        createdBy: documento.created_by || ''
       })
       return acc
     }, {})
@@ -1482,24 +1494,36 @@ const ForecastModule = ({
     }
 
     try {
+      setGuardandoDocumento(true)
       const archivoUrl = documentForm.file
-        ? await uploadForecastFile({
-            forecastId: selectedForecast.id,
-            file: documentForm.file,
-            folder: documentForm.etapa.toLowerCase().replace(/\s+/g, '-')
-          })
+        ? await (async () => {
+            try {
+              return await uploadForecastFile({
+                forecastId: selectedForecast.id,
+                file: documentForm.file,
+                folder: documentForm.etapa.toLowerCase().replace(/\s+/g, '-')
+              })
+            } catch (uploadError) {
+              throw new Error(`No se pudo subir el archivo: ${getErrorMessage(uploadError, 'error de almacenamiento')}`)
+            }
+          })()
         : ''
 
-      const created = await createForecastDocument({
-        forecast_id: selectedForecast.id,
-        etapa: documentForm.etapa,
-        tipo: documentForm.tipo,
-        nombre: documentForm.nombre,
-        archivo_url: archivoUrl || null,
-        edit_url: documentForm.editUrl || null,
-        comentarios: documentForm.comentarios || null,
-        created_by: currentUserName || ''
-      })
+      let created
+      try {
+        created = await createForecastDocument({
+          forecast_id: selectedForecast.id,
+          etapa: documentForm.etapa,
+          tipo: documentForm.tipo,
+          nombre: documentForm.nombre,
+          archivo_url: archivoUrl || null,
+          edit_url: documentForm.editUrl || null,
+          comentarios: documentForm.comentarios || null,
+          created_by: currentUserName || currentUser?.email || ''
+        })
+      } catch (insertError) {
+        throw new Error(`No se pudo guardar el documento: ${getErrorMessage(insertError, 'error de base de datos')}`)
+      }
 
       if (documentForm.tipo === 'Brief' && documentForm.etapa === 'Brief') {
         await updateForecast(selectedForecast.id, {
@@ -1520,7 +1544,9 @@ const ForecastModule = ({
       notifyToast(`Documento "${created?.nombre || 'nuevo'}" agregado`, 'success')
     } catch (documentError) {
       console.error('Error agregando documento:', documentError)
-      notifyToast('No se pudo agregar el documento', 'error')
+      notifyToast(getErrorMessage(documentError, 'No se pudo agregar el documento'), 'error')
+    } finally {
+      setGuardandoDocumento(false)
     }
   }
 
@@ -1946,10 +1972,11 @@ const ForecastModule = ({
                 <button
                   type="button"
                   onClick={handleAddDocument}
-                  className="px-5 py-3 rounded-xl text-white font-semibold shadow-lg"
+                  disabled={guardandoDocumento}
+                  className="px-5 py-3 rounded-xl text-white font-semibold shadow-lg disabled:opacity-60"
                   style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
                 >
-                  Agregar documento
+                  {guardandoDocumento ? 'Guardando...' : 'Agregar documento'}
                 </button>
 
                 <div className="mt-6 space-y-3">
@@ -1963,7 +1990,10 @@ const ForecastModule = ({
                           <span className="px-2 py-1 rounded-full bg-gray-100 text-xs font-semibold text-gray-700">{documento.etapa}</span>
                           <span className="text-xs text-gray-500">{documento.tipo}</span>
                         </div>
-                        <p className="text-xs text-gray-500 mt-1">{formatDateTime(documento.createdAt)}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {formatDateTime(documento.createdAt)}
+                          {documento.createdBy ? ` · Subió: ${documento.createdBy}` : ''}
+                        </p>
                         {documento.comentarios ? <p className="text-sm text-gray-600 mt-2">{documento.comentarios}</p> : null}
                       </div>
                       <div className="flex items-center gap-2 flex-wrap">
