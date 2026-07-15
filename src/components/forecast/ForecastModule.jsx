@@ -156,6 +156,14 @@ const formatDateTime = (value) => {
   })
 }
 
+const normalizeExternalUrl = (value) => {
+  const trimmed = String(value || '').trim()
+  if (!trimmed) return ''
+  if (/^(https?:|mailto:|tel:)/i.test(trimmed)) return trimmed
+  if (trimmed.startsWith('//')) return `https:${trimmed}`
+  return `https://${trimmed.replace(/^\/+/, '')}`
+}
+
 const getStageIndex = (stage) => {
   const index = FORECAST_STAGES.indexOf(stage)
   return index >= 0 ? index : 0
@@ -1509,6 +1517,10 @@ const ForecastModule = ({
           })()
         : ''
 
+      const normalizedEditUrl = documentForm.editUrl.trim()
+        ? normalizeExternalUrl(documentForm.editUrl)
+        : null
+
       let created
       try {
         created = await createForecastDocument({
@@ -1517,7 +1529,7 @@ const ForecastModule = ({
           tipo: documentForm.tipo,
           nombre: documentForm.nombre,
           archivo_url: archivoUrl || null,
-          edit_url: documentForm.editUrl || null,
+          edit_url: normalizedEditUrl,
           comentarios: documentForm.comentarios || null,
           created_by: currentUserName || currentUser?.email || ''
         })
@@ -1528,7 +1540,7 @@ const ForecastModule = ({
       if (documentForm.tipo === 'Brief' && documentForm.etapa === 'Brief') {
         await updateForecast(selectedForecast.id, {
           brief_doc_url: archivoUrl || selectedForecast.briefDocUrl || null,
-          brief_edit_url: documentForm.editUrl || selectedForecast.briefEditUrl || null
+          brief_edit_url: normalizedEditUrl || selectedForecast.briefEditUrl || null
         })
       }
 
@@ -2008,12 +2020,12 @@ const ForecastModule = ({
                         ) : null}
                         {documento.editUrl ? (
                           <a
-                            href={documento.editUrl}
+                            href={normalizeExternalUrl(documento.editUrl)}
                             target="_blank"
                             rel="noreferrer"
                             className="px-3 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-sm font-semibold text-gray-700"
                           >
-                            Ver link
+                            {documento.archivoUrl ? 'Editar link' : 'Ver archivo'}
                           </a>
                         ) : null}
                         {documento.archivoUrl ? (
