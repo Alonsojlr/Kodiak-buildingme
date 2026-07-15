@@ -6107,8 +6107,10 @@ const ProtocolosModule = ({
     String(user?.role || '').toLowerCase()
   );
   const hideFinancials =
-    user?.role === 'compras' &&
-    (userEmail.includes('eyzaguirre') || userEmail.includes('jeyzaguirre') || userEmail.includes('jyzaguirre'));
+    user?.role === 'diseno' || (
+      user?.role === 'compras' &&
+      (userEmail.includes('eyzaguirre') || userEmail.includes('jeyzaguirre') || userEmail.includes('jyzaguirre'))
+    );
   
   // Cargar protocolos desde Supabase
   const [protocolos, setProtocolos] = useState([]);
