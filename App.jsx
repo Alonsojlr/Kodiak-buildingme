@@ -24,7 +24,7 @@ import { ReportesModule as InformesModule } from './src/components/reportes/Repo
 import ForecastModule from './src/components/forecast/ForecastModule';
 import { getForecasts as getForecastRecords } from './src/api/forecast';
 import { buildMentionUsers, getDetectedMentionUsers, getMentionSearchState, getMentionSegments, getMentionSuggestions, getUnknownMentionTokens, replaceMentionAtCursor } from './src/utils/chatMentions';
-import { getPushNotificationStatus, subscribeToPushNotifications, sendChatMentionPush } from './src/api/pushNotifications';
+import { getPushNotificationStatus, subscribeToPushNotifications, sendChatMentionPush, sendPushNotificationTest } from './src/api/pushNotifications';
 
 const TOAST_EVENT = 'app-toast';
 
@@ -245,9 +245,19 @@ const PushNotificationsButton = ({ user }) => {
   const label = isActive ? 'Alertas activas' : isBlocked ? 'Alertas bloqueadas' : 'Activar alertas';
 
   const handleSubscribe = async () => {
-    if (isActive || isBlocked || loading) return;
+    if (isBlocked || loading) return;
     setLoading(true);
     try {
+      if (isActive) {
+        const result = await sendPushNotificationTest();
+        if (Number(result?.sent || 0) > 0) {
+          notifyToast('Alerta de prueba enviada al teléfono.', 'success');
+        } else {
+          notifyToast('No se encontró una suscripción activa para este teléfono.', 'error');
+        }
+        return;
+      }
+
       const nextStatus = await subscribeToPushNotifications();
       setStatus(nextStatus);
       notifyToast('Alertas activadas. Recibirás notificaciones cuando te mencionen.', 'success');
@@ -263,7 +273,7 @@ const PushNotificationsButton = ({ user }) => {
     <button
       type="button"
       onClick={handleSubscribe}
-      disabled={isActive || isBlocked || loading}
+      disabled={isBlocked || loading}
       className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
         isActive
           ? 'cursor-default bg-white/20 text-white'
@@ -271,11 +281,11 @@ const PushNotificationsButton = ({ user }) => {
             ? 'cursor-not-allowed bg-white/10 text-white/60'
             : 'bg-white/15 text-white hover:bg-white/25'
       }`}
-      title={isBlocked ? 'Activa las notificaciones desde la configuración de Safari.' : label}
+      title={isBlocked ? 'Activa las notificaciones desde la configuración de Safari.' : isActive ? 'Enviar una alerta de prueba.' : label}
     >
       {isActive ? <BellRing className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
-      <span className="sm:hidden">Alertas</span>
-      <span className="hidden sm:inline">{loading ? 'Activando...' : label}</span>
+      <span className="sm:hidden">{isActive ? 'Probar' : 'Alertas'}</span>
+      <span className="hidden sm:inline">{loading ? 'Activando...' : isActive ? 'Probar alertas' : label}</span>
     </button>
   );
 };

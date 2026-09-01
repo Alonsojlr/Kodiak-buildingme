@@ -72,3 +72,5 @@ export const sendChatMentionPush = async ({ message, contextType, contextId, pro
     projectName
   })
 }
+
+export const sendPushNotificationTest = async () => invokePushFunction({ action: 'send-test' })

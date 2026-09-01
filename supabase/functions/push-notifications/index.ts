@@ -134,6 +134,48 @@ Deno.serve(async (req) => {
       return json({ ok: true })
     }
 
+    if (action === 'send-test') {
+      const { data: subscriptions, error: subscriptionsError } = await supabaseAdmin
+        .from('push_subscriptions')
+        .select('id, endpoint, p256dh, auth')
+        .eq('user_id', user.id)
+      if (subscriptionsError) throw subscriptionsError
+
+      let sent = 0
+      const expiredIds: string[] = []
+      const notification = JSON.stringify({
+        title: 'Kodiak',
+        body: 'Las alertas push están activas en este teléfono.',
+        url: Deno.env.get('APP_URL') || req.headers.get('origin') || '/',
+        tag: 'kodiak-push-test'
+      })
+
+      await Promise.all((subscriptions || []).map(async (subscription: PushSubscriptionRecord) => {
+        try {
+          const subscriber = applicationServer.subscribe({
+            endpoint: subscription.endpoint,
+            keys: { p256dh: subscription.p256dh, auth: subscription.auth }
+          })
+          await subscriber.pushTextMessage(notification, {
+            urgency: webpush.Urgency.High,
+            ttl: 3600,
+            topic: 'kodiak-push-test'
+          })
+          sent += 1
+        } catch (error) {
+          const status = (error as { response?: Response })?.response?.status
+          if (status === 404 || status === 410) expiredIds.push(subscription.id)
+          console.error('No se pudo enviar push de prueba:', error)
+        }
+      }))
+
+      if (expiredIds.length) {
+        await supabaseAdmin.from('push_subscriptions').delete().in('id', expiredIds)
+      }
+
+      return json({ ok: true, sent })
+    }
+
     if (action !== 'notify-mentions') return json({ error: 'Acción inválida.' }, 400)
 
     const message = String(body?.message || '').trim()
