@@ -16,7 +16,18 @@ const getRegistration = async () => {
 }
 
 const invokePushFunction = async (body) => {
-  const { data, error } = await supabase.functions.invoke('push-notifications', { body })
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+  if (sessionError || !session?.access_token) {
+    throw new Error('Tu sesión expiró. Inicia sesión nuevamente para activar alertas.')
+  }
+
+  const { data, error } = await supabase.functions.invoke('push-notifications', {
+    body,
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      apikey: import.meta.env.VITE_SUPABASE_ANON_KEY
+    }
+  })
   if (error) throw error
   return data
 }
