@@ -226,7 +226,19 @@ const PushNotificationsButton = ({ user }) => {
     };
   }, [user?.id]);
 
-  if (!status.supported) return null;
+  if (!status.supported) {
+    return (
+      <button
+        type="button"
+        onClick={() => notifyToast('Para activar alertas en iPhone, instala Kodiak desde Safari usando “Agregar a pantalla de inicio”.', 'info')}
+        className="flex items-center gap-2 rounded-xl bg-white/15 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/25"
+        title="Instala Kodiak en la pantalla de inicio para activar alertas."
+      >
+        <Bell className="h-4 w-4" />
+        <span>Alertas</span>
+      </button>
+    );
+  }
 
   const isBlocked = status.permission === 'denied';
   const isActive = status.permission === 'granted' && status.subscribed;
