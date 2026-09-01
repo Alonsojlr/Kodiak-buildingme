@@ -255,3 +255,45 @@ export const updateOrdenCompraFactura = async (id, updates) => {
   if (error) throw error
   return data[0]
 }
+
+// Mantiene el estado general de la OC alineado con sus documentos recibidos.
+// Una OC con documentos queda pagada solo cuando todos sus documentos lo están.
+export const syncOrdenCompraPaymentStatus = async (ordenId) => {
+  const [orden, facturas] = await Promise.all([
+    getOrdenCompraById(ordenId),
+    getOrdenCompraFacturas([ordenId])
+  ])
+
+  if (facturas.length === 0) return orden
+
+  const todasPagadas = facturas.every((factura) => factura.estado_pago === 'Pagada')
+  const updates = todasPagadas
+    ? {
+        estado: 'Pagada',
+        estado_pago: 'Pagada',
+        fecha_pago: orden.fecha_pago || new Date().toISOString().split('T')[0]
+      }
+    : {
+        estado: 'Facturada',
+        estado_pago: 'Pendiente',
+        fecha_pago: null
+      }
+
+  return updateOrdenCompra(ordenId, updates)
+}
+
+// Al pagar una OC completa, deja sus documentos en el mismo estado.
+export const markOrdenCompraAsPaid = async (ordenId, fechaPago = new Date().toISOString().split('T')[0]) => {
+  const facturas = await getOrdenCompraFacturas([ordenId])
+  await Promise.all(
+    facturas
+      .filter((factura) => factura.estado_pago !== 'Pagada')
+      .map((factura) => updateOrdenCompraFactura(factura.id, { estado_pago: 'Pagada' }))
+  )
+
+  return updateOrdenCompra(ordenId, {
+    estado: 'Pagada',
+    estado_pago: 'Pagada',
+    fecha_pago: fechaPago
+  })
+}

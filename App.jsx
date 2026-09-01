@@ -11,7 +11,7 @@ import {
   updateProtocoloFactura,
   deleteProtocoloFactura
 } from './src/api/protocolos';
-import { getOrdenesCompra, getOrdenCompraById, createOrdenCompra, updateOrdenCompra, replaceOrdenCompraItems, deleteOrdenCompra, getOrdenCompraFacturas, createOrdenCompraFactura, deleteOrdenCompraFactura, updateOrdenCompraFactura } from './src/api/ordenes-compra';
+import { getOrdenesCompra, getOrdenCompraById, createOrdenCompra, updateOrdenCompra, replaceOrdenCompraItems, deleteOrdenCompra, getOrdenCompraFacturas, createOrdenCompraFactura, deleteOrdenCompraFactura, updateOrdenCompraFactura, syncOrdenCompraPaymentStatus, markOrdenCompraAsPaid } from './src/api/ordenes-compra';
 import { getClientes, createCliente, updateCliente, deleteCliente, getContactosByCliente, createContacto, updateContacto, deleteContacto, getAllContactos } from './src/api/clientes';
 import { getProveedores, createProveedor, updateProveedor, deleteProveedor } from './src/api/proveedores';
 import { autenticarUsuario, cerrarSesion, obtenerSesionActual, getUsuarios, createUsuario, updateUsuario, deleteUsuario } from './src/api/usuarios';
@@ -3443,10 +3443,6 @@ const OrdenesCompraModule = ({
           }}
           onSaveFactura={async (ordenActualizada) => {
             try {
-              await updateOrdenCompra(ordenActualizada.id, {
-                estado: ordenActualizada.estado || 'Facturada',
-                estado_pago: ordenActualizada.estadoPago || 'Pendiente'
-              });
               await loadOrdenes();
             } catch (error) {
               console.error('Error actualizando estado OC:', error);
@@ -3454,11 +3450,10 @@ const OrdenesCompraModule = ({
           }}
           onSavePago={async (ordenActualizada) => {
             try {
-              await updateOrdenCompra(ordenActualizada.id, {
-                estado: 'Pagada',
-                estado_pago: 'Pagada',
-                fecha_pago: ordenActualizada.fechaPago || new Date().toISOString().split('T')[0]
-              });
+              await markOrdenCompraAsPaid(
+                ordenActualizada.id,
+                ordenActualizada.fechaPago || new Date().toISOString().split('T')[0]
+              );
               await loadOrdenes();
               setOrdenSeleccionada(ordenActualizada);
             } catch (error) {
@@ -3513,6 +3508,14 @@ const OrdenesCompraModule = ({
               });
 
               await replaceOrdenCompraItems(ordenActualizada.id, itemsLimpios);
+              if (ordenActualizada.estado === 'Pagada') {
+                await markOrdenCompraAsPaid(
+                  ordenActualizada.id,
+                  ordenActualizada.fechaPago || new Date().toISOString().split('T')[0]
+                );
+              } else {
+                await syncOrdenCompraPaymentStatus(ordenActualizada.id);
+              }
               await loadOrdenes();
 
               setShowDetalleModal(false);
@@ -4395,12 +4398,16 @@ const DetalleOCModal = ({ orden: ordenInicial, onClose, onUpdate, onSave, onSave
         estadoPago: nueva.estado_pago || 'Pendiente'
       };
       setFacturas(prev => [...prev, nuevaFactura]);
-      if (orden.estado === 'Emitida' || orden.estado === 'Recibida') {
-        const actualizada = { ...orden, estado: 'Facturada' };
-        setOrden(actualizada);
-        onUpdate(actualizada);
-        if (onSaveFactura) onSaveFactura(actualizada);
-      }
+      const sincronizada = await syncOrdenCompraPaymentStatus(orden.id);
+      const actualizada = {
+        ...orden,
+        estado: sincronizada.estado || 'Facturada',
+        estadoPago: sincronizada.estado_pago || 'Pendiente',
+        fechaPago: sincronizada.fecha_pago || ''
+      };
+      setOrden(actualizada);
+      onUpdate(actualizada);
+      if (onSaveFactura) await onSaveFactura(actualizada);
     } catch (error) {
       console.error('Error guardando factura:', error);
       alert('No se pudo guardar el documento');
@@ -4412,6 +4419,16 @@ const DetalleOCModal = ({ orden: ordenInicial, onClose, onUpdate, onSave, onSave
     try {
       await deleteOrdenCompraFactura(facturaId);
       setFacturas(prev => prev.filter(f => f.id !== facturaId));
+      const sincronizada = await syncOrdenCompraPaymentStatus(orden.id);
+      const actualizada = {
+        ...orden,
+        estado: sincronizada.estado || orden.estado,
+        estadoPago: sincronizada.estado_pago || 'Pendiente',
+        fechaPago: sincronizada.fecha_pago || ''
+      };
+      setOrden(actualizada);
+      onUpdate(actualizada);
+      if (onSaveFactura) await onSaveFactura(actualizada);
     } catch (error) {
       console.error('Error eliminando factura:', error);
       alert('No se pudo eliminar el documento');
@@ -4423,12 +4440,22 @@ const DetalleOCModal = ({ orden: ordenInicial, onClose, onUpdate, onSave, onSave
     try {
       await updateOrdenCompraFactura(factura.id, { estado_pago: nuevoEstado });
       setFacturas(prev => prev.map(f => f.id === factura.id ? { ...f, estadoPago: nuevoEstado } : f));
+      const sincronizada = await syncOrdenCompraPaymentStatus(orden.id);
+      const actualizada = {
+        ...orden,
+        estado: sincronizada.estado || orden.estado,
+        estadoPago: sincronizada.estado_pago || 'Pendiente',
+        fechaPago: sincronizada.fecha_pago || ''
+      };
+      setOrden(actualizada);
+      onUpdate(actualizada);
+      if (onSaveFactura) await onSaveFactura(actualizada);
     } catch (error) {
       console.error('Error actualizando factura:', error);
     }
   };
 
-  const marcarPagada = () => {
+  const marcarPagada = async () => {
     const actualizada = {
       ...orden,
       estadoPago: 'Pagada',
@@ -4436,9 +4463,10 @@ const DetalleOCModal = ({ orden: ordenInicial, onClose, onUpdate, onSave, onSave
       fechaPago: orden.fechaPago || new Date().toISOString().split('T')[0]
     };
     setOrden(actualizada);
+    setFacturas(prev => prev.map(factura => ({ ...factura, estadoPago: 'Pagada' })));
     onUpdate(actualizada);
     if (onSavePago) {
-      onSavePago(actualizada);
+      await onSavePago(actualizada);
     }
   };
 
@@ -5033,6 +5061,15 @@ const ProveedoresModule = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'proveedores' }, () => {
         loadProveedores();
       })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('proveedores-ordenes-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes_compra' }, loadProveedores)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ordenes_compra_facturas' }, loadProveedores)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
@@ -5892,11 +5929,7 @@ const HistorialProveedorModal = ({ proveedor, onClose }) => {
                           onClick={async () => {
                             try {
                               const fechaPago = new Date().toISOString().split('T')[0];
-                              await updateOrdenCompra(oc.id, {
-                                estado: 'Pagada',
-                                estado_pago: 'Pagada',
-                                fecha_pago: fechaPago
-                              });
+                              await markOrdenCompraAsPaid(oc.id, fechaPago);
                               setOrdenesCompra(prev =>
                                 prev.map(item =>
                                   item.id === oc.id
@@ -6785,13 +6818,6 @@ const ProtocolosModule = ({
             }}
             onSaveFactura={async (ordenActualizada) => {
               try {
-                await updateOrdenCompra(ordenActualizada.id, {
-                  numero_factura: ordenActualizada.numeroFactura || '',
-                  fecha_factura: ordenActualizada.fechaFactura || null,
-                  estado: ordenActualizada.estado || 'Facturada',
-                  estado_pago: ordenActualizada.estadoPago || 'Pendiente',
-                  fecha_pago: ordenActualizada.fechaPago || null
-                });
                 await refrescarOrdenesCompra();
                 setOrdenDetalle(ordenActualizada);
               } catch (error) {
@@ -6801,11 +6827,10 @@ const ProtocolosModule = ({
             }}
             onSavePago={async (ordenActualizada) => {
               try {
-                await updateOrdenCompra(ordenActualizada.id, {
-                  estado: 'Pagada',
-                  estado_pago: 'Pagada',
-                  fecha_pago: ordenActualizada.fechaPago || new Date().toISOString().split('T')[0]
-                });
+                await markOrdenCompraAsPaid(
+                  ordenActualizada.id,
+                  ordenActualizada.fechaPago || new Date().toISOString().split('T')[0]
+                );
                 await refrescarOrdenesCompra();
                 setOrdenDetalle(ordenActualizada);
               } catch (error) {
@@ -6868,6 +6893,14 @@ const ProtocolosModule = ({
                 });
 
                 await replaceOrdenCompraItems(ordenActualizada.id, itemsLimpios);
+                if (ordenActualizada.estado === 'Pagada') {
+                  await markOrdenCompraAsPaid(
+                    ordenActualizada.id,
+                    ordenActualizada.fechaPago || new Date().toISOString().split('T')[0]
+                  );
+                } else {
+                  await syncOrdenCompraPaymentStatus(ordenActualizada.id);
+                }
                 await refrescarOrdenesCompra();
 
                 setShowDetalleOC(false);
