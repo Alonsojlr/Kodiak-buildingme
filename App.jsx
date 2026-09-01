@@ -14424,6 +14424,7 @@ const Dashboard = ({ user, onLogout }) => {
       numeroCotizacion: o.numero_cotizacion || '',
       codigoProtocolo: o.codigo_protocolo,
       fecha: o.fecha,
+      proveedorId: o.proveedor_id || null,
       proveedor:
         o.proveedores?.razon_social ||
         proveedoresById.get(String(o.proveedor_id))?.razon_social ||
