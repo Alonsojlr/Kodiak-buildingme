@@ -15,21 +15,38 @@ const getRegistration = async () => {
   return navigator.serviceWorker.ready
 }
 
-const invokePushFunction = async (body) => {
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-  if (sessionError || !session?.access_token) {
-    throw new Error('Tu sesión expiró. Inicia sesión nuevamente para activar alertas.')
-  }
-
-  const { data, error } = await supabase.functions.invoke('push-notifications', {
+const invokePushFunctionWithSession = async (body, session) => {
+  return supabase.functions.invoke('push-notifications', {
     body,
     headers: {
       Authorization: `Bearer ${session.access_token}`,
       apikey: import.meta.env.VITE_SUPABASE_ANON_KEY
     }
   })
-  if (error) throw error
-  return data
+}
+
+const invokePushFunction = async (body) => {
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+  if (sessionError || !session?.access_token) {
+    throw new Error('Tu sesión expiró. Inicia sesión nuevamente para activar alertas.')
+  }
+
+  let result = await invokePushFunctionWithSession(body, session)
+  const responseStatus = result.error?.context?.status
+  if (!result.error || responseStatus !== 401) {
+    if (result.error) throw result.error
+    return result.data
+  }
+
+  // A stale browser session can survive in local storage after a token rotation.
+  const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession()
+  if (refreshError || !refreshed.session?.access_token) {
+    throw new Error('Tu sesión expiró. Inicia sesión nuevamente para activar alertas.')
+  }
+
+  result = await invokePushFunctionWithSession(body, refreshed.session)
+  if (result.error) throw result.error
+  return result.data
 }
 
 export const getPushNotificationStatus = async () => {
