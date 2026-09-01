@@ -262,7 +262,8 @@ const PushNotificationsButton = ({ user }) => {
       title={isBlocked ? 'Activa las notificaciones desde la configuración de Safari.' : label}
     >
       {isActive ? <BellRing className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
-      <span className="hidden lg:inline">{loading ? 'Activando...' : label}</span>
+      <span className="sm:hidden">Alertas</span>
+      <span className="hidden sm:inline">{loading ? 'Activando...' : label}</span>
     </button>
   );
 };
