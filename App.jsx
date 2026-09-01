@@ -14121,7 +14121,7 @@ const Dashboard = ({ user, onLogout }) => {
     const nombreProyecto = forecast?.nombreProyecto || `FW-${forecast?.numero || ''}`;
     const remitente = String(mensaje.user_name || mensaje.user_email || 'Usuario');
 
-    notifyToast(`Mensaje de ${remitente} en Forecast ${nombreProyecto || ''}`.trim(), 'info');
+    notifyToast(`Mensaje de ${remitente} en Draft ${nombreProyecto || ''}`.trim(), 'info');
     playNotificationSound();
   };
 
@@ -15086,7 +15086,7 @@ const Dashboard = ({ user, onLogout }) => {
 
   const menuItems = [
     { id: 'dashboard', name: 'Dashboard', icon: BarChart3, roles: ['admin', 'comercial', 'finanzas'] },
-    { id: 'forecast', name: 'Forecast', icon: Clock, roles: ['admin', 'comercial', 'compras', 'ventas', 'diseno'] },
+    { id: 'forecast', name: 'Draft', icon: Clock, roles: ['admin', 'comercial', 'compras', 'ventas', 'diseno'] },
     { id: 'cotizaciones', name: 'Cotizaciones', icon: FileText, roles: ['admin', 'comercial', 'finanzas', 'ventas'] },
     { id: 'protocolos', name: 'Protocolos de Compra', icon: Package, roles: ['admin', 'comercial', 'compras'] },
     { id: 'gantt', name: 'Carta Gantt', icon: Calendar, roles: ['admin', 'comercial', 'compras', 'ventas', 'diseno'] },
@@ -15176,7 +15176,7 @@ const Dashboard = ({ user, onLogout }) => {
                     type="button"
                     onClick={handleHeaderForecastChatAlertClick}
                     className="group flex items-center gap-3 rounded-2xl border border-white/20 bg-white/12 px-4 py-2 shadow-lg backdrop-blur-md transition-all hover:bg-white/18 hover:shadow-xl"
-                    title="Ver mensajes pendientes de Forecast"
+                    title="Ver mensajes pendientes de Draft"
                   >
                     <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white/20">
                       <MessageCircle className="h-5 w-5 text-white" />
@@ -15197,10 +15197,10 @@ const Dashboard = ({ user, onLogout }) => {
                   <DropdownMensajesNoLeidos
                     visible={showUnreadForecastChatDropdown && forecastsNoLeidos.length > 1}
                     loading={loadingUnreadForecastChatSummaries}
-                    title="Mensajes sin leer en Forecast"
-                    subtitle="Selecciona el forecast que quieres responder"
+                    title="Mensajes sin leer en Draft"
+                    subtitle="Selecciona el Draft que quieres responder"
                     prefix="FW-"
-                    entitySingular="forecast"
+                    entitySingular="Draft"
                     items={forecastsNoLeidos.map((forecast) => ({
                       ...forecast,
                       ...unreadForecastChatSummaries[forecast.id]

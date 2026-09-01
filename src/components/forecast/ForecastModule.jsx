@@ -263,7 +263,7 @@ const ForecastFormModal = ({ onClose, onSave, clients = [] }) => {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl my-8">
         <div className="p-6 border-b" style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}>
           <div className="flex items-center justify-between">
-            <h3 className="text-2xl font-bold text-white">Nuevo Forecast</h3>
+            <h3 className="text-2xl font-bold text-white">Nuevo Draft</h3>
             <button onClick={onClose} className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors">
               <XCircle className="w-6 h-6" />
             </button>
@@ -399,7 +399,7 @@ const ForecastFormModal = ({ onClose, onSave, clients = [] }) => {
               Cancelar
             </button>
             <button type="submit" className="px-6 py-3 rounded-xl text-white font-semibold shadow-lg" style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}>
-              Crear Forecast
+              Crear Draft
             </button>
           </div>
         </form>
@@ -442,8 +442,8 @@ const CreateClientFromForecastModal = ({ forecast, onClose, onSave, existingClie
         <div className="p-6 border-b" style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}>
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-2xl font-bold text-white">Crear Cliente desde Forecast</h3>
-              <p className="text-sm text-white/80 mt-1">Se vinculará automáticamente al forecast</p>
+              <h3 className="text-2xl font-bold text-white">Crear Cliente desde Draft</h3>
+              <p className="text-sm text-white/80 mt-1">Se vinculará automáticamente al Draft</p>
             </div>
             <button onClick={onClose} className="text-white hover:bg-white/20 p-2 rounded-lg transition-colors">
               <XCircle className="w-6 h-6" />
@@ -968,7 +968,7 @@ const ForecastChatPanel = ({ forecast, mentionUsers = [], currentUserName, curre
   return (
     <div className="bg-white rounded-2xl shadow-lg border border-gray-100 flex flex-col h-[520px]">
       <div className="p-4 border-b border-gray-100">
-        <h3 className="text-lg font-bold text-gray-800">Chat del Forecast</h3>
+        <h3 className="text-lg font-bold text-gray-800">Chat del Draft</h3>
         <p className="text-xs text-gray-500 mt-1 truncate">{forecast?.nombreProyecto || `FW-${forecast?.numero || ''}`}</p>
       </div>
 
@@ -976,7 +976,7 @@ const ForecastChatPanel = ({ forecast, mentionUsers = [], currentUserName, curre
         {loadingMensajes ? (
           <p className="text-sm text-gray-500">Cargando mensajes...</p>
         ) : mensajes.length === 0 ? (
-          <p className="text-sm text-gray-500">No hay mensajes aún. Inicia la conversación del forecast.</p>
+          <p className="text-sm text-gray-500">No hay mensajes aún. Inicia la conversación del Draft.</p>
         ) : (
           mensajes.map((mensaje) => {
             const own = isOwnMessage(mensaje)
@@ -1352,7 +1352,7 @@ const ForecastModule = ({
       }
     } catch (loadError) {
       console.error('Error cargando forecast:', loadError)
-      setError('No se pudo cargar Forecast. Ejecuta primero forecast-migration.sql en Supabase.')
+      setError('No se pudo cargar Draft. Ejecuta primero forecast-migration.sql en Supabase.')
     } finally {
       setLoading(false)
     }
@@ -1378,25 +1378,25 @@ const ForecastModule = ({
       await loadForecastData(false)
       setSelectedForecastId(created?.id || null)
       setShowNewModal(false)
-      notifyToast('Forecast creado correctamente', 'success')
+      notifyToast('Draft creado correctamente', 'success')
     } catch (createError) {
       console.error('Error creando forecast:', createError)
-      notifyToast('No se pudo crear el forecast', 'error')
+      notifyToast('No se pudo crear el Draft', 'error')
     }
   }
 
   const handleDeleteForecast = async (forecast) => {
     if (!canDeleteForecast) return
-    const confirmed = window.confirm(`¿Eliminar el Forecast FW-${forecast.numero}?`)
+    const confirmed = window.confirm(`¿Eliminar el Draft FW-${forecast.numero}?`)
     if (!confirmed) return
 
     try {
       await deleteForecast(forecast.id)
       await loadForecastData(false)
-      notifyToast('Forecast eliminado correctamente', 'success')
+      notifyToast('Draft eliminado correctamente', 'success')
     } catch (deleteError) {
       console.error('Error eliminando forecast:', deleteError)
-      notifyToast('No se pudo eliminar el forecast', 'error')
+      notifyToast('No se pudo eliminar el Draft', 'error')
     }
   }
 
@@ -1525,7 +1525,7 @@ const ForecastModule = ({
       notifyToast('Cliente creado y vinculado correctamente', 'success')
     } catch (createClientError) {
       console.error('Error creando cliente desde forecast:', createClientError)
-      notifyToast('No se pudo crear el cliente desde el forecast', 'error')
+      notifyToast('No se pudo crear el cliente desde el Draft', 'error')
     }
   }
 
@@ -1697,7 +1697,7 @@ const ForecastModule = ({
     <div>
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold text-gray-800 mb-2">Forecast</h2>
+          <h2 className="text-3xl font-bold text-gray-800 mb-2">Draft</h2>
           <p className="text-gray-600">Antesala del proyecto desde brief hasta protocolo</p>
         </div>
         <button
@@ -1706,7 +1706,7 @@ const ForecastModule = ({
           style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
         >
           <Plus className="w-5 h-5" />
-          <span>Nuevo Forecast</span>
+          <span>Nuevo Draft</span>
         </button>
       </div>
 
@@ -1739,9 +1739,9 @@ const ForecastModule = ({
 
           <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
             {loading ? (
-              <div className="text-center py-12 text-gray-500">Cargando forecast...</div>
+              <div className="text-center py-12 text-gray-500">Cargando Draft...</div>
             ) : filteredForecasts.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">No hay forecast registrados</div>
+              <div className="text-center py-12 text-gray-500">No hay Draft registrados</div>
             ) : (
               filteredForecasts.map((forecast) => (
                 <button
@@ -1782,7 +1782,7 @@ const ForecastModule = ({
         <div>
           {!selectedForecast ? (
             <div className="bg-white rounded-2xl shadow-lg p-12 text-center text-gray-500">
-              Selecciona un forecast para ver el detalle.
+              Selecciona un Draft para ver el detalle.
             </div>
           ) : (
             <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
@@ -1892,7 +1892,7 @@ const ForecastModule = ({
                         onClick={() => setShowCreateClientModal(true)}
                         className="px-4 py-2 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50"
                       >
-                        Crear cliente desde Forecast
+                        Crear cliente desde Draft
                       </button>
                     </div>
                   </div>
