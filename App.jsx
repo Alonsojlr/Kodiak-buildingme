@@ -115,8 +115,8 @@ const formatRutInput = (value) => {
 };
 
 const INVENTARIO_FAMILIAS = ['Televisores', 'Sillas', 'Mesas', 'Electricos', 'Varios'];
-const CHAT_READ_STATE_VERSION = 3;
-const FORECAST_CHAT_READ_STATE_VERSION = 2;
+const CHAT_READ_STATE_VERSION = 4;
+const FORECAST_CHAT_READ_STATE_VERSION = 3;
 
 const getInventarioFamilia = (item) => {
   const searchable = normalizePlainText([
@@ -6772,6 +6772,7 @@ const ProtocolosModule = ({
           }}
           canEdit={canEditDeleteProtocolos}
           canManageCore={canManageProtocoloCore}
+          onMarkChatRead={markProtocoloChatAsRead}
         />
         {showDetalleOC && ordenDetalle && (
           <DetalleOCModal
@@ -7405,7 +7406,7 @@ const VistaListadoProtocolos = ({ protocolos, chatReadState = {}, onVerDetalle, 
 // ========================================
 // VISTA DETALLE DEL PROTOCOLO (PÁGINA COMPLETA)
 // ========================================
-const ProtocoloChatPanel = ({ protocolo, mentionUsers = [], currentUserName, currentUser }) => {
+const ProtocoloChatPanel = ({ protocolo, mentionUsers = [], currentUserName, currentUser, onMarkAsRead }) => {
   const [mensajes, setMensajes] = useState([]);
   const [nuevoMensaje, setNuevoMensaje] = useState('');
   const [loadingMensajes, setLoadingMensajes] = useState(true);
@@ -7415,6 +7416,7 @@ const ProtocoloChatPanel = ({ protocolo, mentionUsers = [], currentUserName, cur
   const [mentionSuggestionIndex, setMentionSuggestionIndex] = useState(0);
   const listEndRef = useRef(null);
   const lastMessageAtRef = useRef(null);
+  const markAsReadRef = useRef(onMarkAsRead);
   const textareaRef = useRef(null);
 
   const protocoloId = protocolo?.id;
@@ -7467,6 +7469,18 @@ const ProtocoloChatPanel = ({ protocolo, mentionUsers = [], currentUserName, cur
     if (currentName && messageName) return currentName === messageName;
     return false;
   };
+
+  useEffect(() => {
+    markAsReadRef.current = onMarkAsRead;
+  }, [onMarkAsRead]);
+
+  const countRelevantMessages = (items = []) => (
+    items.reduce((count, mensaje) => {
+      if (isOwnMessage(mensaje)) return count;
+      if (!messageMentionsUser(mensaje.texto, { name: senderName, email: senderEmail })) return count;
+      return count + 1;
+    }, 0)
+  );
 
   const formatHora = (value) => {
     if (!value) return '';
@@ -7562,7 +7576,9 @@ const ProtocoloChatPanel = ({ protocolo, mentionUsers = [], currentUserName, cur
         setMensajes([]);
         setErrorChat('No se pudo cargar el chat. Verifica que la tabla de chat esté creada.');
       } else {
-        setMensajes((data || []).map(mapMensaje));
+        const normalized = (data || []).map(mapMensaje);
+        setMensajes(normalized);
+        markAsReadRef.current?.(protocoloId, countRelevantMessages(normalized));
       }
       setLoadingMensajes(false);
     };
@@ -7591,7 +7607,9 @@ const ProtocoloChatPanel = ({ protocolo, mentionUsers = [], currentUserName, cur
           const nuevo = mapMensaje(payload.new || {});
           setMensajes((prev) => {
             if (prev.some((m) => m.id === nuevo.id)) return prev;
-            return [...prev, nuevo];
+            const next = [...prev, nuevo];
+            markAsReadRef.current?.(protocoloId, countRelevantMessages(next));
+            return next;
           });
         }
       )
@@ -7641,7 +7659,9 @@ const ProtocoloChatPanel = ({ protocolo, mentionUsers = [], currentUserName, cur
         const existingIds = new Set(prev.map((m) => m.id));
         const toAdd = nuevos.filter((m) => !existingIds.has(m.id));
         if (!toAdd.length) return prev;
-        return [...prev, ...toAdd];
+        const next = [...prev, ...toAdd];
+        markAsReadRef.current?.(protocoloId, countRelevantMessages(next));
+        return next;
       });
     };
 
@@ -7847,7 +7867,8 @@ const VistaDetalleProtocolo = ({
   currentUser,
   hideFinancials = false,
   canEdit = true,
-  canManageCore = false
+  canManageCore = false,
+  onMarkChatRead
 }) => {
   const canEditProtocolo = !!canEdit;
   const canManageCoreActions = !!canManageCore;
@@ -8301,6 +8322,7 @@ const VistaDetalleProtocolo = ({
           mentionUsers={mentionUsers}
           currentUserName={currentUserName}
           currentUser={currentUser}
+          onMarkAsRead={onMarkChatRead}
         />
       </div>
       <div className="order-1 xl:order-1">
