@@ -14021,6 +14021,17 @@ const Dashboard = ({ user, onLogout }) => {
     }));
   };
 
+  const markProtocoloChatAsRead = (protocoloId, totalCount = 0) => {
+    if (!protocoloId) return;
+    setSharedChatReadState((prev) => ({
+      ...prev,
+      [protocoloId]: {
+        readCount: Math.max(0, Number(totalCount) || 0),
+        readAt: new Date().toISOString()
+      }
+    }));
+  };
+
   const notifyIncomingChatMessage = (mensaje) => {
     if (!mensaje?.id || !mensaje?.protocolo_id) return;
     if (registerProcessedChatNotify(mensaje.id)) return;
@@ -14799,8 +14810,14 @@ const Dashboard = ({ user, onLogout }) => {
   const protocolosNoLeidos = useMemo(() => (
     sharedProtocolos
       .map((protocolo) => {
-        const readCount = sharedChatReadState?.[protocolo.id]?.readCount || 0;
-        const unreadCount = Math.max(0, (protocolo.chatMessagesCount || 0) - readCount);
+        const readState = sharedChatReadState?.[protocolo.id] || {};
+        const readCount = readState.readCount || 0;
+        const readAt = new Date(readState.readAt || 0).getTime();
+        const lastMessageAt = new Date(protocolo.chatLastMessageAt || 0).getTime();
+        const readAfterLastMessage = readAt && lastMessageAt && readAt >= lastMessageAt;
+        const unreadCount = readAfterLastMessage
+          ? 0
+          : Math.max(0, (protocolo.chatMessagesCount || 0) - readCount);
         return unreadCount > 0 ? { ...protocolo, unreadCount } : null;
       })
       .filter(Boolean)
@@ -14817,8 +14834,14 @@ const Dashboard = ({ user, onLogout }) => {
   const forecastsNoLeidos = useMemo(() => (
     sharedForecasts
       .map((forecast) => {
-        const readCount = sharedForecastChatReadState?.[forecast.id]?.readCount || 0;
-        const unreadCount = Math.max(0, (forecast.chatMessagesCount || 0) - readCount);
+        const readState = sharedForecastChatReadState?.[forecast.id] || {};
+        const readCount = readState.readCount || 0;
+        const readAt = new Date(readState.readAt || 0).getTime();
+        const lastMessageAt = new Date(forecast.chatLastMessageAt || 0).getTime();
+        const readAfterLastMessage = readAt && lastMessageAt && readAt >= lastMessageAt;
+        const unreadCount = readAfterLastMessage
+          ? 0
+          : Math.max(0, (forecast.chatMessagesCount || 0) - readCount);
         return unreadCount > 0 ? { ...forecast, unreadCount } : null;
       })
       .filter(Boolean)
@@ -14836,6 +14859,7 @@ const Dashboard = ({ user, onLogout }) => {
   const abrirProtocoloDesdeMensajes = (protocolo) => {
     if (!protocolo) return;
     setShowUnreadChatDropdown(false);
+    markProtocoloChatAsRead(protocolo.id, protocolo.chatMessagesCount || 0);
     setProtocoloParaAbrir({ ...protocolo });
     setActiveModule('protocolos');
   };
