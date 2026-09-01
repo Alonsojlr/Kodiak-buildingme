@@ -12194,15 +12194,24 @@ const [showNewModal, setShowNewModal] = useState(false);
                         </>
                       )}
                       {/* Crear Protocolo (solo si está ganada) */}
-                      {cot.estado === 'ganada' && (
-                        <button
-                          onClick={() => onAdjudicarVenta(cot)}
-                          className="p-2 bg-purple-100 hover:bg-purple-200 rounded-lg transition-colors"
-                          title="Crear Protocolo"
-                        >
-                          <Package className="w-4 h-4 text-purple-600" />
-                        </button>
-                      )}
+                      {cot.estado === 'ganada' && (() => {
+                        const protocoloExistente = Boolean(
+                          cot.adjudicada_a_protocolo || getProtocoloDeCotizacion(cot)
+                        );
+                        return (
+                          <button
+                            onClick={() => onAdjudicarVenta(cot)}
+                            className={`p-2 rounded-lg transition-colors ${
+                              protocoloExistente
+                                ? 'bg-purple-100 hover:bg-purple-200'
+                                : 'bg-sky-100 hover:bg-sky-200'
+                            }`}
+                            title={protocoloExistente ? 'Abrir Protocolo' : 'Crear Protocolo'}
+                          >
+                            <Package className={`w-4 h-4 ${protocoloExistente ? 'text-purple-600' : 'text-sky-600'}`} />
+                          </button>
+                        );
+                      })()}
                       {/* Ver Detalle */}
                       <button
                         onClick={() => {
