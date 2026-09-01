@@ -4,6 +4,14 @@ import App from './App';
 import './index.css';
 import 'leaflet/dist/leaflet.css';
 
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js').catch((error) => {
+      console.error('No se pudo registrar el service worker de Kodiak.', error);
+    });
+  });
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <App />

@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "Kodiak | Gestión de Proyectos",
+  "short_name": "Kodiak",
+  "description": "Gestión de proyectos Building Me.",
+  "lang": "es-CL",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8faf9",
+  "theme_color": "#27786f",
+  "icons": [
+    {
+      "src": "/icons/kodiak-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/kodiak-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
