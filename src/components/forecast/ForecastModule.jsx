@@ -1146,6 +1146,7 @@ const ForecastModule = ({
     protocoloId: ''
   })
   const isDisenoRole = String(currentUser?.role || '').toLowerCase() === 'diseno'
+  const canDeleteForecast = String(currentUser?.role || '').toLowerCase() !== 'ventas'
   const canEditForecastLinks = !isDisenoRole
   const canOpenLinkedCotizacion = !isDisenoRole && typeof onOpenCotizacion === 'function'
   const canOpenLinkedProtocolo = !isDisenoRole && typeof onOpenProtocolo === 'function'
@@ -1385,6 +1386,7 @@ const ForecastModule = ({
   }
 
   const handleDeleteForecast = async (forecast) => {
+    if (!canDeleteForecast) return
     const confirmed = window.confirm(`¿Eliminar el Forecast FW-${forecast.numero}?`)
     if (!confirmed) return
 
@@ -1618,6 +1620,7 @@ const ForecastModule = ({
   }
 
   const handleDeleteDocument = async (documento) => {
+    if (!canDeleteForecast) return
     const confirmed = window.confirm(`¿Eliminar el documento "${documento.nombre}"?`)
     if (!confirmed) return
     try {
@@ -1675,6 +1678,7 @@ const ForecastModule = ({
   }
 
   const handleDeleteMilestone = async (milestone) => {
+    if (!canDeleteForecast) return
     const confirmed = window.confirm(`¿Eliminar el hito "${milestone.titulo}"?`)
     if (!confirmed) return
     try {
@@ -1809,7 +1813,7 @@ const ForecastModule = ({
                     <p className="text-gray-600 mt-1">{selectedForecast.clienteNombre}</p>
                     <p className="text-sm text-gray-500 mt-2">{selectedForecast.descripcion || 'Sin descripción'}</p>
                   </div>
-                  <div className="flex gap-3">
+                  {canDeleteForecast && <div className="flex gap-3">
                     <button
                       type="button"
                       onClick={() => handleDeleteForecast(selectedForecast)}
@@ -1817,7 +1821,7 @@ const ForecastModule = ({
                     >
                       Eliminar
                     </button>
-                  </div>
+                  </div>}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
                   <div className="bg-gray-50 rounded-xl p-4">
@@ -2140,13 +2144,15 @@ const ForecastModule = ({
                             <Download className="w-4 h-4" />
                           </a>
                         ) : null}
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteDocument(documento)}
-                          className="px-3 py-2 rounded-xl border border-red-200 hover:bg-red-50 text-sm font-semibold text-red-700"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {canDeleteForecast && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteDocument(documento)}
+                            className="px-3 py-2 rounded-xl border border-red-200 hover:bg-red-50 text-sm font-semibold text-red-700"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -2236,13 +2242,15 @@ const ForecastModule = ({
                             <option value="En Proceso">En Proceso</option>
                             <option value="Listo">Listo</option>
                           </select>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteMilestone(hito)}
-                            className="px-3 py-2 rounded-xl border border-red-200 hover:bg-red-50 text-sm font-semibold text-red-700"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {canDeleteForecast && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteMilestone(hito)}
+                              className="px-3 py-2 rounded-xl border border-red-200 hover:bg-red-50 text-sm font-semibold text-red-700"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>

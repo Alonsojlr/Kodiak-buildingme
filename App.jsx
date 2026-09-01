@@ -414,6 +414,7 @@ const getRoleLabel = (role) => {
     admin: 'Admin',
     comercial: 'Comercial',
     compras: 'Compras',
+    ventas: 'Ventas',
     diseno: 'Diseño',
     finanzas: 'Finanzas',
     auditor: 'Auditor',
@@ -427,7 +428,7 @@ const LOGIN_PORTALS = [
     id: 'buildingme',
     title: 'Building Me',
     subtitle: 'Acceso General',
-    allowedRoles: ['admin', 'comercial', 'compras', 'diseno', 'finanzas'],
+    allowedRoles: ['admin', 'comercial', 'compras', 'ventas', 'diseno', 'finanzas'],
     buttonLabel: 'Entrar a Building Me'
   },
   {
@@ -676,7 +677,8 @@ const LoginPage = ({ onLogin }) => {
 };
 
 // Componente de Módulo de Inventario/Bodega
-const InventarioModule = ({ activeModule, sharedProtocolos = [] }) => {
+const InventarioModule = ({ activeModule, sharedProtocolos = [], user }) => {
+  const canDeleteInventario = user?.role !== 'ventas';
   const [showNewModal, setShowNewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showFichaModal, setShowFichaModal] = useState(false);
@@ -827,6 +829,7 @@ const InventarioModule = ({ activeModule, sharedProtocolos = [] }) => {
   };
 
   const handleEliminarItem = async (item) => {
+    if (!canDeleteInventario) return;
     const reservasActivas = (item.reservas || []).filter((r) => !r.devuelto);
     const reservasDevueltas = (item.reservas || []).filter((r) => r.devuelto);
 
@@ -1164,12 +1167,14 @@ const InventarioModule = ({ activeModule, sharedProtocolos = [] }) => {
                     >
                       Editar
                     </button>
-                    <button
-                      onClick={() => handleEliminarItem(item)}
-                      className="w-full py-2 rounded-xl border-2 border-red-300 text-red-700 font-semibold hover:bg-red-50 transition-colors"
-                    >
-                      Eliminar
-                    </button>
+                    {canDeleteInventario && (
+                      <button
+                        onClick={() => handleEliminarItem(item)}
+                        className="w-full py-2 rounded-xl border-2 border-red-300 text-red-700 font-semibold hover:bg-red-50 transition-colors"
+                      >
+                        Eliminar
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1289,7 +1294,7 @@ const InventarioModule = ({ activeModule, sharedProtocolos = [] }) => {
               alert('Error al actualizar reserva');
             }
           }}
-          onEliminarReserva={async (reservaId) => {
+          onEliminarReserva={canDeleteInventario ? async (reservaId) => {
             try {
               await deleteInventarioReserva(reservaId);
               await loadItems(itemSeleccionado.id);
@@ -1298,7 +1303,7 @@ const InventarioModule = ({ activeModule, sharedProtocolos = [] }) => {
               console.error('Error eliminando reserva:', error);
               alert('Error al eliminar reserva');
             }
-          }}
+          } : undefined}
         />
       )}
     </div>
@@ -10454,7 +10459,8 @@ const AddItemModal = ({
 };
 
 // Componente de Módulo de Clientes
-const ClientesModule = () => {
+const ClientesModule = ({ user }) => {
+  const canDeleteClientes = user?.role !== 'ventas';
   const [showNewModal, setShowNewModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showHistorialModal, setShowHistorialModal] = useState(false);
@@ -10523,6 +10529,7 @@ const ClientesModule = () => {
   });
 
   const eliminarCliente = async (id) => {
+    if (!canDeleteClientes) return;
     if (confirm('¿Estás seguro de eliminar este cliente? Esta acción no se puede deshacer.')) {
       try {
         await deleteCliente(id);
@@ -10690,13 +10697,15 @@ const ClientesModule = () => {
                       >
                         <Building2 className="w-4 h-4 text-yellow-600" />
                       </button>
-                      <button
-                        onClick={() => eliminarCliente(cliente.id)}
-                        className="p-2 bg-red-100 hover:bg-red-200 rounded-lg transition-colors"
-                        title="Eliminar"
-                      >
-                        <XCircle className="w-4 h-4 text-red-600" />
-                      </button>
+                      {canDeleteClientes && (
+                        <button
+                          onClick={() => eliminarCliente(cliente.id)}
+                          className="p-2 bg-red-100 hover:bg-red-200 rounded-lg transition-colors"
+                          title="Eliminar"
+                        >
+                          <XCircle className="w-4 h-4 text-red-600" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -11738,8 +11747,8 @@ const [showNewModal, setShowNewModal] = useState(false);
     titulo: '',
     url: ''
   });
-  const canEditCotizaciones = ['admin', 'comercial', 'finanzas'].includes(user?.role);
-  const canDeleteCotizaciones = user?.role !== 'comercial';
+  const canEditCotizaciones = ['admin', 'comercial', 'finanzas', 'ventas'].includes(user?.role);
+  const canDeleteCotizaciones = !['comercial', 'ventas'].includes(user?.role);
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('es-CL', {
@@ -13815,6 +13824,7 @@ const Dashboard = ({ user, onLogout }) => {
     if (['auditor', 'trade_marketing'].includes(role)) return 'auditorias';
     if (role === 'diseno') return 'forecast';
     if (role === 'compras') return 'protocolos';
+    if (role === 'ventas') return 'forecast';
     return 'dashboard';
   };
 
@@ -15043,6 +15053,7 @@ const Dashboard = ({ user, onLogout }) => {
     if (module === 'administracion' && canAccessAdministracion) return true;
     if (user.role === 'compras' && ['forecast', 'protocolos', 'gantt', 'ordenes', 'proveedores', 'inventario', 'auditorias'].includes(module)) return true;
     if (user.role === 'diseno' && ['forecast', 'gantt', 'proveedores', 'inventario', 'clientes'].includes(module)) return true;
+    if (user.role === 'ventas' && ['forecast', 'cotizaciones', 'gantt', 'inventario', 'clientes'].includes(module)) return true;
     if (user.role === 'finanzas' && ['cotizaciones', 'clientes', 'facturacion'].includes(module)) return true;
     if (['auditor', 'trade_marketing'].includes(user.role) && module === 'auditorias') return true;
     return false;
@@ -15074,14 +15085,14 @@ const Dashboard = ({ user, onLogout }) => {
 
   const menuItems = [
     { id: 'dashboard', name: 'Dashboard', icon: BarChart3, roles: ['admin', 'comercial', 'finanzas'] },
-    { id: 'forecast', name: 'Forecast', icon: Clock, roles: ['admin', 'comercial', 'compras', 'diseno'] },
-    { id: 'cotizaciones', name: 'Cotizaciones', icon: FileText, roles: ['admin', 'comercial', 'finanzas'] },
+    { id: 'forecast', name: 'Forecast', icon: Clock, roles: ['admin', 'comercial', 'compras', 'ventas', 'diseno'] },
+    { id: 'cotizaciones', name: 'Cotizaciones', icon: FileText, roles: ['admin', 'comercial', 'finanzas', 'ventas'] },
     { id: 'protocolos', name: 'Protocolos de Compra', icon: Package, roles: ['admin', 'comercial', 'compras'] },
-    { id: 'gantt', name: 'Carta Gantt', icon: Calendar, roles: ['admin', 'comercial', 'compras', 'diseno'] },
+    { id: 'gantt', name: 'Carta Gantt', icon: Calendar, roles: ['admin', 'comercial', 'compras', 'ventas', 'diseno'] },
     { id: 'ordenes', name: 'Órdenes de Compra', icon: ShoppingCart, roles: ['admin', 'comercial', 'compras'] },
-    { id: 'inventario', name: 'Bodega/Inventario', icon: Package, roles: ['admin', 'comercial', 'compras', 'diseno'] },
+    { id: 'inventario', name: 'Bodega/Inventario', icon: Package, roles: ['admin', 'comercial', 'compras', 'ventas', 'diseno'] },
     { id: 'proveedores', name: 'Proveedores', icon: Building2, roles: ['admin', 'comercial', 'compras', 'diseno'] },
-    { id: 'clientes', name: 'Clientes', icon: Users, roles: ['admin', 'comercial', 'finanzas', 'diseno'] },
+    { id: 'clientes', name: 'Clientes', icon: Users, roles: ['admin', 'comercial', 'finanzas', 'ventas', 'diseno'] },
     { id: 'informes', name: 'Informes', icon: TrendingUp, roles: ['admin', 'comercial', 'finanzas'] },
     { id: 'auditorias', name: 'Auditorías', icon: ClipboardCheck, roles: ['admin', 'comercial', 'auditor', 'trade_marketing', 'compras'] },
     { id: 'administracion', name: 'Administración', icon: Settings, roles: ['admin', 'comercial'] }
@@ -15525,7 +15536,7 @@ const Dashboard = ({ user, onLogout }) => {
           )}
 
           {activeModule === 'clientes' && hasAccess('clientes') && (
-            <ClientesModule />
+            <ClientesModule user={user} />
           )}
 
           {activeModule === 'administracion' && canAccessAdministracion && (
@@ -15534,7 +15545,7 @@ const Dashboard = ({ user, onLogout }) => {
 
           {/* Módulo de Inventario/Bodega */}
           {hasAccess('inventario') && (
-            <InventarioModule activeModule={activeModule} sharedProtocolos={sharedProtocolos} />
+            <InventarioModule activeModule={activeModule} sharedProtocolos={sharedProtocolos} user={user} />
           )}
 
           {/* Módulo de Informes */}
