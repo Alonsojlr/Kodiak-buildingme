@@ -11972,9 +11972,11 @@ const [showNewModal, setShowNewModal] = useState(false);
   };
 
   const getProtocoloDeCotizacion = (cot) => {
-    if (!cot?.adjudicada_a_protocolo) return null;
-    return sharedProtocolos.find(
-      (p) => String(p.folio) === String(cot.adjudicada_a_protocolo)
+    if (!cot) return null;
+    const numeroCotizacion = normalizarNumero(cot.numero);
+    return sharedProtocolos.find((p) =>
+      (cot.adjudicada_a_protocolo && String(p.folio) === String(cot.adjudicada_a_protocolo)) ||
+      (numeroCotizacion && normalizarNumero(p.numeroCotizacion) === numeroCotizacion)
     ) || null;
   };
 
@@ -14635,6 +14637,31 @@ const Dashboard = ({ user, onLogout }) => {
  // Handlers para comunicación entre módulos
   const handleAdjudicarVentaDesdeCotizacion = async (cotizacion) => {
     try {
+      // Detectar el vínculo desde ambos lados para no duplicar protocolos antiguos.
+      const protocolosExistentes = await getProtocolos();
+      const numeroCotizacion = normalizarNumero(cotizacion.numero);
+      const protocoloExistente = protocolosExistentes.find((protocolo) =>
+        (cotizacion.adjudicada_a_protocolo && String(protocolo.folio) === String(cotizacion.adjudicada_a_protocolo)) ||
+        (numeroCotizacion && normalizarNumero(protocolo.numero_cotizacion) === numeroCotizacion)
+      );
+
+      if (protocoloExistente) {
+        if (String(cotizacion.adjudicada_a_protocolo || '') !== String(protocoloExistente.folio)) {
+          await updateCotizacion(cotizacion.id, {
+            adjudicada_a_protocolo: protocoloExistente.folio
+          });
+          setSharedCotizaciones((prev) => prev.map((item) =>
+            item.id === cotizacion.id
+              ? { ...item, adjudicada_a_protocolo: protocoloExistente.folio }
+              : item
+          ));
+        }
+        setProtocoloParaAbrir(protocoloExistente);
+        setActiveModule('protocolos');
+        alert(`Abriendo protocolo ${protocoloExistente.folio}`);
+        return;
+      }
+
       const nombreProyecto = String(
         cotizacion.nombreProyecto || cotizacion.nombre_proyecto || ''
       ).trim();
@@ -14643,20 +14670,7 @@ const Dashboard = ({ user, onLogout }) => {
         return;
       }
 
-      // Verificar si la cotización ya tiene protocolo
-      if (cotizacion.adjudicada_a_protocolo) {
-        const folioExistente = String(cotizacion.adjudicada_a_protocolo);
-        const protocoloExistente =
-          sharedProtocolos.find((p) => String(p.folio) === folioExistente) ||
-          { folio: folioExistente };
-        setProtocoloParaAbrir(protocoloExistente);
-        setActiveModule('protocolos');
-        alert(`Abriendo protocolo ${folioExistente}`);
-        return;
-      }
-
       // Obtener todos los protocolos para calcular el siguiente folio
-      const protocolosExistentes = await getProtocolos();
       const ultimoFolio = protocolosExistentes.length > 0
         ? Math.max(...protocolosExistentes.map(p => {
             const num = parseInt(p.folio);
