@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kodiak-shell-v1';
+const CACHE_NAME = 'kodiak-shell-v2';
 const APP_SHELL = ['/', '/manifest.webmanifest', '/icons/kodiak-192.png', '/icons/kodiak-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -44,4 +44,32 @@ self.addEventListener('fetch', (event) => {
       });
     })
   );
+});
+
+self.addEventListener('push', (event) => {
+  let payload = {};
+
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { body: event.data?.text() || 'Tienes una nueva actualización en Kodiak.' };
+  }
+
+  const title = payload.title || 'Kodiak';
+  const options = {
+    body: payload.body || 'Tienes una nueva actualización.',
+    icon: '/icons/kodiak-192.png',
+    badge: '/icons/kodiak-192.png',
+    tag: payload.tag || 'kodiak-notification',
+    data: { url: payload.url || '/' },
+    renotify: true
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = new URL(event.notification.data?.url || '/', self.location.origin).href;
+  event.waitUntil(clients.openWindow(targetUrl));
 });

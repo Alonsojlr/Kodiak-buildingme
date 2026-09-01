@@ -17,13 +17,14 @@ import { getProveedores, createProveedor, updateProveedor, deleteProveedor } fro
 import { autenticarUsuario, cerrarSesion, obtenerSesionActual, getUsuarios, createUsuario, updateUsuario, deleteUsuario } from './src/api/usuarios';
 import { getInventarioItems, getInventarioReservas, createInventarioItem, updateInventarioItem, deleteInventarioItem, createInventarioReserva, updateInventarioReserva, deleteInventarioReserva, deleteInventarioReservasByItem } from './src/api/inventario';
 import { getGastosAdministracion, createGastoAdministracion, updateGastoAdministracion, deleteGastoAdministracion } from './src/api/administracion';
-import { BarChart3, FileText, ShoppingCart, Package, Users, Building2, Settings, LogOut, TrendingUp, Clock, DollarSign, CheckCircle, XCircle, Pause, Download, Calendar, ChevronLeft, ChevronRight, Plus, Trash2, Edit2, Edit3, Star, ClipboardCheck, MessageCircle, ZoomIn, ZoomOut, AlertTriangle } from 'lucide-react';
+import { BarChart3, Bell, BellRing, FileText, ShoppingCart, Package, Users, Building2, Settings, LogOut, TrendingUp, Clock, DollarSign, CheckCircle, XCircle, Pause, Download, Calendar, ChevronLeft, ChevronRight, Plus, Trash2, Edit2, Edit3, Star, ClipboardCheck, MessageCircle, ZoomIn, ZoomOut, AlertTriangle } from 'lucide-react';
 import { generarCotizacionPDF, generarOCPDF, generarProtocoloPDF } from './src/utils/documentGenerator';
 import AuditoriasModule from './src/components/auditorias/AuditoriasModule';
 import { ReportesModule as InformesModule } from './src/components/reportes/ReportesModule';
 import ForecastModule from './src/components/forecast/ForecastModule';
 import { getForecasts as getForecastRecords } from './src/api/forecast';
 import { buildMentionUsers, getDetectedMentionUsers, getMentionSearchState, getMentionSegments, getMentionSuggestions, getUnknownMentionTokens, replaceMentionAtCursor } from './src/utils/chatMentions';
+import { getPushNotificationStatus, subscribeToPushNotifications, sendChatMentionPush } from './src/api/pushNotifications';
 
 const TOAST_EVENT = 'app-toast';
 
@@ -204,6 +205,66 @@ const playNotificationSound = () => {
   } catch (error) {
     console.error('No se pudo reproducir sonido de notificación:', error);
   }
+};
+
+const PushNotificationsButton = ({ user }) => {
+  const [status, setStatus] = useState({ supported: false, permission: 'default', subscribed: false });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    getPushNotificationStatus()
+      .then((nextStatus) => {
+        if (active) setStatus(nextStatus);
+      })
+      .catch(() => {
+        if (active) setStatus({ supported: false, permission: 'unsupported', subscribed: false });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
+  if (!status.supported) return null;
+
+  const isBlocked = status.permission === 'denied';
+  const isActive = status.permission === 'granted' && status.subscribed;
+  const label = isActive ? 'Alertas activas' : isBlocked ? 'Alertas bloqueadas' : 'Activar alertas';
+
+  const handleSubscribe = async () => {
+    if (isActive || isBlocked || loading) return;
+    setLoading(true);
+    try {
+      const nextStatus = await subscribeToPushNotifications();
+      setStatus(nextStatus);
+      notifyToast('Alertas activadas. Recibirás notificaciones cuando te mencionen.', 'success');
+    } catch (error) {
+      console.error('No se pudieron activar las alertas push:', error);
+      notifyToast(error?.message || 'No se pudieron activar las alertas.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleSubscribe}
+      disabled={isActive || isBlocked || loading}
+      className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
+        isActive
+          ? 'cursor-default bg-white/20 text-white'
+          : isBlocked
+            ? 'cursor-not-allowed bg-white/10 text-white/60'
+            : 'bg-white/15 text-white hover:bg-white/25'
+      }`}
+      title={isBlocked ? 'Activa las notificaciones desde la configuración de Safari.' : label}
+    >
+      {isActive ? <BellRing className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
+      <span className="hidden lg:inline">{loading ? 'Activando...' : label}</span>
+    </button>
+  );
 };
 
 
@@ -7605,6 +7666,16 @@ const ProtocoloChatPanel = ({ protocolo, mentionUsers = [], currentUserName, cur
         return [...prev, normalized];
       });
       setNuevoMensaje('');
+      if (getDetectedMentionUsers(texto, mentionUsers).length > 0) {
+        sendChatMentionPush({
+          message: texto,
+          contextType: 'protocolo',
+          contextId: protocoloId,
+          projectName: protocolo?.nombreProyecto || `PT-${protocolo?.folio || ''}`
+        }).catch((pushError) => {
+          console.error('No se pudo enviar la alerta push de protocolo:', pushError);
+        });
+      }
     }
 
     setEnviandoMensaje(false);
@@ -14924,6 +14995,24 @@ const Dashboard = ({ user, onLogout }) => {
     }
   }, [activeModule, user?.role]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const contextType = params.get('push');
+    const contextId = params.get('id');
+    if (!contextId || !['forecast', 'protocolo'].includes(contextType)) return;
+
+    if (contextType === 'forecast' && hasAccess('forecast')) {
+      setActiveModule('forecast');
+      setForecastParaAbrir({ id: contextId });
+    }
+    if (contextType === 'protocolo' && hasAccess('protocolos')) {
+      setActiveModule('protocolos');
+      setProtocoloParaAbrir({ id: contextId });
+    }
+
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }, [user?.id]);
+
   const menuItems = [
     { id: 'dashboard', name: 'Dashboard', icon: BarChart3, roles: ['admin', 'comercial', 'finanzas'] },
     { id: 'forecast', name: 'Forecast', icon: Clock, roles: ['admin', 'comercial', 'compras', 'diseno'] },
@@ -15063,6 +15152,7 @@ const Dashboard = ({ user, onLogout }) => {
             
             {/* Usuario a la derecha */}
             <div className="flex items-center space-x-4">
+              <PushNotificationsButton user={user} />
               <div className="text-right">
                 <p className="text-white font-semibold">{user.name}</p>
                 <p className="text-sm text-white/70">{getRoleLabel(user.role)}</p>

@@ -29,6 +29,7 @@ import {
   MessageCircle
 } from 'lucide-react'
 import { getDetectedMentionUsers, getMentionSearchState, getMentionSegments, getMentionSuggestions, getUnknownMentionTokens, replaceMentionAtCursor } from '../../utils/chatMentions'
+import { sendChatMentionPush } from '../../api/pushNotifications'
 
 const TOAST_EVENT = 'app-toast'
 const FORECAST_DOCS_BUCKET = 'audit-fotos'
@@ -949,6 +950,16 @@ const ForecastChatPanel = ({ forecast, mentionUsers = [], currentUserName, curre
         return next
       })
       setNuevoMensaje('')
+      if (getDetectedMentionUsers(texto, mentionUsers).length > 0) {
+        sendChatMentionPush({
+          message: texto,
+          contextType: 'forecast',
+          contextId: forecastId,
+          projectName: forecast?.nombreProyecto || `FW-${forecast?.numero || ''}`
+        }).catch((pushError) => {
+          console.error('No se pudo enviar la alerta push de forecast:', pushError)
+        })
+      }
     }
 
     setEnviandoMensaje(false)
