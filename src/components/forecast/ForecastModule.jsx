@@ -26,7 +26,9 @@ import {
   Trash2,
   XCircle,
   Download,
-  MessageCircle
+  MessageCircle,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { getDetectedMentionUsers, getMentionSearchState, getMentionSegments, getMentionSuggestions, getUnknownMentionTokens, replaceMentionAtCursor } from '../../utils/chatMentions'
 import { sendChatMentionPush } from '../../api/pushNotifications'
@@ -37,6 +39,18 @@ const FORECAST_STAGES = ['Brief', 'Render propuesta', 'Correcciones', 'Render fi
 const FORECAST_PRIORITIES = ['Baja', 'Media', 'Alta', 'Urgente']
 const FORECAST_MILESTONE_TYPES = ['Diseño', 'Solicitud Planos', 'Planos', 'Producción Taller', 'Entrega Archivos', 'Carpeta Documentos', 'Entrega Final', 'Otro']
 const BUSINESS_UNITS = ['Vía Pública', 'Stand y Ferias', 'TradeMarketing', 'Inmobiliarias', 'Imprenta', 'Varios', 'Financiamiento']
+const MILESTONE_COLORS = {
+  'Diseño': { dot: 'bg-fuchsia-500', badge: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200' },
+  'Solicitud Planos': { dot: 'bg-amber-500', badge: 'bg-amber-50 text-amber-700 border-amber-200' },
+  Planos: { dot: 'bg-sky-500', badge: 'bg-sky-50 text-sky-700 border-sky-200' },
+  'Producción Taller': { dot: 'bg-orange-500', badge: 'bg-orange-50 text-orange-700 border-orange-200' },
+  'Entrega Archivos': { dot: 'bg-violet-500', badge: 'bg-violet-50 text-violet-700 border-violet-200' },
+  'Carpeta Documentos': { dot: 'bg-teal-500', badge: 'bg-teal-50 text-teal-700 border-teal-200' },
+  'Entrega Final': { dot: 'bg-emerald-500', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  Otro: { dot: 'bg-slate-500', badge: 'bg-slate-50 text-slate-700 border-slate-200' }
+}
+
+const getMilestoneColor = (type) => MILESTONE_COLORS[type] || MILESTONE_COLORS.Otro
 
 const notifyToast = (message, type = 'success') => {
   if (!message) return
@@ -1095,6 +1109,65 @@ const ForecastChatPanel = ({ forecast, mentionUsers = [], currentUserName, curre
   )
 }
 
+const DraftCalendar = ({ month, milestones = [], deadline, onPreviousMonth, onNextMonth }) => {
+  const year = month.getFullYear()
+  const monthIndex = month.getMonth()
+  const firstWeekday = new Date(year, monthIndex, 1).getDay()
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate()
+  const monthLabel = month.toLocaleDateString('es-CL', { month: 'long', year: 'numeric' })
+  const entriesByDay = new Map()
+
+  const addEntry = (dateValue, title, type) => {
+    if (!dateValue) return
+    const date = new Date(`${dateValue}T00:00:00`)
+    if (Number.isNaN(date.getTime()) || date.getFullYear() !== year || date.getMonth() !== monthIndex) return
+    const day = date.getDate()
+    const entries = entriesByDay.get(day) || []
+    entries.push({ title, type, color: getMilestoneColor(type) })
+    entriesByDay.set(day, entries)
+  }
+
+  milestones.forEach((milestone) => {
+    addEntry(milestone.fecha, milestone.titulo, milestone.tipo)
+  })
+  addEntry(deadline, 'Fecha limite general', 'Limite')
+
+  return (
+    <div className="bg-[#f2fbf8] border border-[#45ad98]/20 rounded-2xl p-4">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <button type="button" onClick={onPreviousMonth} className="p-2 rounded-lg hover:bg-white text-[#235250]" aria-label="Mes anterior">
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+        <p className="capitalize font-bold text-gray-800">{monthLabel}</p>
+        <button type="button" onClick={onNextMonth} className="p-2 rounded-lg hover:bg-white text-[#235250]" aria-label="Mes siguiente">
+          <ChevronRight className="w-5 h-5" />
+        </button>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-gray-500 mb-2">
+        {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((day, index) => <span key={`${day}-${index}`}>{day}</span>)}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {Array.from({ length: firstWeekday }).map((_, index) => <div key={`empty-${index}`} className="min-h-12" />)}
+        {Array.from({ length: daysInMonth }).map((_, index) => {
+          const day = index + 1
+          const entries = entriesByDay.get(day) || []
+          return (
+            <div key={day} title={entries.map((entry) => entry.title).join(', ')} className={`min-h-12 rounded-lg p-1 text-xs ${entries.length ? 'bg-white border border-[#45ad98]/40 shadow-sm' : 'bg-white/60'}`}>
+              <span className={`inline-flex w-5 h-5 items-center justify-center rounded-full ${entries.length ? `${entries[0].color.dot} text-white font-bold` : 'text-gray-600'}`}>{day}</span>
+              {entries.slice(0, 2).map((entry, entryIndex) => (
+                <span key={`${entry.title}-${entryIndex}`} className="flex items-center gap-1 mt-0.5 truncate text-[9px] text-[#235250] font-medium">
+                  <i className={`w-1.5 h-1.5 rounded-full shrink-0 ${entry.color.dot}`} />{entry.title}
+                </span>
+              ))}
+              {entries.length > 2 ? <span className="block text-[9px] text-[#45ad98] font-bold">+{entries.length - 2}</span> : null}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 const ForecastModule = ({
   activeModule,
   sharedForecasts = [],
@@ -1108,17 +1181,20 @@ const ForecastModule = ({
   onSelectForecast,
   onMarkChatRead,
   onOpenCotizacion,
-  onOpenProtocolo
+  onOpenProtocolo,
+  onCreateProtocoloFromCotizacion
 }) => {
   const [forecasts, setForecasts] = useState([])
   const [clientes, setClientes] = useState([])
   const [selectedForecastId, setSelectedForecastId] = useState(null)
+  const [vistaActual, setVistaActual] = useState('listado')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showNewModal, setShowNewModal] = useState(false)
   const [showCreateClientModal, setShowCreateClientModal] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterStage, setFilterStage] = useState('todos')
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1))
   const [previewDocumento, setPreviewDocumento] = useState(null)
   const [guardandoDocumento, setGuardandoDocumento] = useState(false)
   const selectedForecastIdRef = useRef(null)
@@ -1136,7 +1212,6 @@ const ForecastModule = ({
     titulo: '',
     tipo: 'Diseño',
     fecha: '',
-    fechaFin: '',
     responsable: '',
     notas: ''
   })
@@ -1171,6 +1246,14 @@ const ForecastModule = ({
       return matchSearch && matchStage
     })
   }, [forecasts, filterStage, searchTerm])
+
+  const openForecastDetail = (forecast) => {
+    if (!forecast) return
+    setSelectedForecastId(forecast.id)
+    setVistaActual('detalle')
+    onMarkChatRead?.(forecast.id, forecast.chatMessagesCount || 0)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   useEffect(() => {
     if (activeModule !== 'forecast') return
@@ -1259,6 +1342,7 @@ const ForecastModule = ({
     if (!forecastObjetivo) return
 
     setSelectedForecastId(forecastObjetivo.id)
+    setVistaActual('detalle')
     onMarkChatRead?.(forecastObjetivo.id, forecastObjetivo.chatMessagesCount || 0)
     onLimpiarForecastParaAbrir?.()
   }, [forecastParaAbrir, forecasts, onLimpiarForecastParaAbrir, onMarkChatRead])
@@ -1377,6 +1461,7 @@ const ForecastModule = ({
       })
       await loadForecastData(false)
       setSelectedForecastId(created?.id || null)
+      setVistaActual('detalle')
       setShowNewModal(false)
       notifyToast('Draft creado correctamente', 'success')
     } catch (createError) {
@@ -1440,6 +1525,29 @@ const ForecastModule = ({
     } catch (linkError) {
       console.error('Error guardando vínculos:', linkError)
       notifyToast('No se pudieron guardar los vínculos', 'error')
+    }
+  }
+
+  const handleCreateLinkedProtocolo = async () => {
+    if (!selectedForecast || !linkSelection.cotizacionId || typeof onCreateProtocoloFromCotizacion !== 'function') return
+    const cotizacion = sharedCotizaciones.find((item) => String(item.id) === String(linkSelection.cotizacionId))
+    if (!cotizacion) {
+      notifyToast('Selecciona primero una cotización', 'warning')
+      return
+    }
+
+    try {
+      const protocolo = await onCreateProtocoloFromCotizacion(cotizacion)
+      if (!protocolo?.id) return
+      await updateForecast(selectedForecast.id, {
+        protocolo_id: protocolo.id,
+        etapa_actual: 'Protocolo'
+      })
+      await loadForecastData()
+      notifyToast(`Protocolo PT-${protocolo.folio} vinculado al Draft`, 'success')
+    } catch (createError) {
+      console.error('Error creando protocolo desde Draft:', createError)
+      notifyToast('No se pudo crear o vincular el protocolo', 'error')
     }
   }
 
@@ -1646,7 +1754,7 @@ const ForecastModule = ({
         titulo: milestoneForm.titulo,
         tipo: milestoneForm.tipo,
         fecha: milestoneForm.fecha || null,
-        fecha_fin: milestoneForm.fechaFin || null,
+        fecha_fin: null,
         responsable: milestoneForm.responsable || null,
         notas: milestoneForm.notas || null,
         orden: (selectedForecast.hitos?.length || 0) + 1
@@ -1656,7 +1764,6 @@ const ForecastModule = ({
         titulo: '',
         tipo: 'Diseño',
         fecha: '',
-        fechaFin: '',
         responsable: '',
         notas: ''
       })
@@ -1695,98 +1802,131 @@ const ForecastModule = ({
 
   return (
     <div>
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold text-gray-800 mb-2">Draft</h2>
-          <p className="text-gray-600">Antesala del proyecto desde brief hasta protocolo</p>
-        </div>
-        <button
-          onClick={() => setShowNewModal(true)}
-          className="flex items-center gap-2 px-6 py-3 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all"
-          style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
-        >
-          <Plus className="w-5 h-5" />
-          <span>Nuevo Draft</span>
-        </button>
-      </div>
-
-      {error && (
-        <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg text-red-700">
-          {error}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-6">
-        <div className="bg-white rounded-2xl shadow-lg p-5">
-          <div className="space-y-4 mb-4">
-            <input
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por número, cliente o proyecto..."
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98]"
-            />
-            <select
-              value={filterStage}
-              onChange={(e) => setFilterStage(e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98] bg-white"
+      {vistaActual === 'listado' ? (
+        <>
+          <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h2 className="text-3xl font-bold text-gray-800 mb-2">Draft</h2>
+              <p className="text-gray-600">Antesala del proyecto desde brief hasta protocolo</p>
+            </div>
+            <button
+              onClick={() => setShowNewModal(true)}
+              className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-white font-semibold shadow-lg hover:shadow-xl transition-all"
+              style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
             >
-              <option value="todos">Todas las etapas</option>
-              {FORECAST_STAGES.map((stage) => (
-                <option key={stage} value={stage}>{stage}</option>
-              ))}
-            </select>
+              <Plus className="w-5 h-5" />
+              <span>Nuevo Draft</span>
+            </button>
           </div>
 
-          <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg text-red-700">
+              {error}
+            </div>
+          )}
+
+          <div className="bg-[#edf8f4] rounded-2xl shadow-lg overflow-hidden border border-[#45ad98]/20">
+            <div className="p-5 border-b border-[#45ad98]/15 bg-white/75 flex flex-col lg:flex-row lg:items-center gap-4">
+              <input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por FW, cliente o proyecto..."
+                className="w-full lg:max-w-xl px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98]"
+              />
+              <select
+                value={filterStage}
+                onChange={(e) => setFilterStage(e.target.value)}
+                className="w-full lg:w-64 px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98] bg-white"
+              >
+                <option value="todos">Todas las etapas</option>
+                {FORECAST_STAGES.map((stage) => (
+                  <option key={stage} value={stage}>{stage}</option>
+                ))}
+              </select>
+              <span className="text-sm text-gray-500 whitespace-nowrap">{filteredForecasts.length} Draft</span>
+            </div>
+
             {loading ? (
-              <div className="text-center py-12 text-gray-500">Cargando Draft...</div>
+              <div className="text-center py-16 text-gray-500">Cargando Draft...</div>
             ) : filteredForecasts.length === 0 ? (
-              <div className="text-center py-12 text-gray-500">No hay Draft registrados</div>
+              <div className="text-center py-16 text-gray-500">No hay Draft registrados</div>
             ) : (
-              filteredForecasts.map((forecast) => (
-                <button
-                  key={forecast.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedForecastId(forecast.id)
-                    onMarkChatRead?.(forecast.id, forecast.chatMessagesCount || 0)
-                  }}
-                  className={`w-full text-left rounded-2xl border-2 p-4 transition-all ${
-                    selectedForecastId === forecast.id
-                      ? 'border-[#45ad98] bg-[#45ad98]/5 shadow-md'
-                      : 'border-gray-200 hover:border-[#45ad98]/50 bg-white'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-mono font-bold text-[#235250]">FW-{forecast.numero}</p>
-                      <p className="font-semibold text-gray-800 mt-1 truncate">{forecast.nombreProyecto}</p>
-                      <p className="text-sm text-gray-500 truncate">{forecast.clienteNombre}</p>
+              <div className="divide-y divide-gray-100">
+                {filteredForecasts.map((forecast) => (
+                  <button
+                    key={forecast.id}
+                    type="button"
+                    onClick={() => openForecastDetail(forecast)}
+                    className="w-full text-left px-5 py-5 hover:bg-white/80 transition-colors"
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-[110px_minmax(0,1.5fr)_minmax(0,1fr)_auto] gap-3 md:items-center">
+                      <div>
+                        <p className="font-mono font-bold text-[#235250]">FW-{forecast.numero}</p>
+                        <p className="text-xs text-gray-500 mt-1">{forecast.prioridad}</p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-800 truncate">{forecast.nombreProyecto || 'Sin nombre de proyecto'}</p>
+                        <p className="text-sm text-gray-500 truncate mt-1">{forecast.clienteNombre}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2 text-xs text-gray-500">
+                        <span>{forecast.documentos.length} docs</span>
+                        <span>{forecast.hitos.length} hitos</span>
+                        {forecast.fechaLimiteGeneral ? <span>Limite: {formatDate(forecast.fechaLimiteGeneral)}</span> : null}
+                      </div>
+                      <div className="flex items-center justify-between md:justify-end gap-3">
+                        {forecast.chatMessagesCount > 0 ? (
+                          <span className="inline-flex items-center justify-center min-w-6 h-6 px-2 rounded-full bg-red-500 text-white text-xs font-bold">
+                            {forecast.chatMessagesCount}
+                          </span>
+                        ) : null}
+                        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 whitespace-nowrap">
+                          {forecast.etapaActual}
+                        </span>
+                      </div>
                     </div>
-                    <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 whitespace-nowrap">
-                      {forecast.etapaActual}
-                    </span>
-                  </div>
-                  <div className="mt-3 flex items-center gap-3 text-xs text-gray-500 flex-wrap">
-                    <span>{forecast.documentos.length} docs</span>
-                    <span>{forecast.hitos.length} hitos</span>
-                    {forecast.cotizacionNumero ? <span>Cot #{forecast.cotizacionNumero}</span> : null}
-                    {forecast.protocoloFolio ? <span>PT-{forecast.protocoloFolio}</span> : null}
-                  </div>
-                </button>
-              ))
+                  </button>
+                ))}
+              </div>
             )}
           </div>
-        </div>
+        </>
+      ) : (
+        <>
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <button
+              type="button"
+              onClick={() => {
+                setVistaActual('listado')
+                setSelectedForecastId(null)
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
+              className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50"
+            >
+              Volver al listado
+            </button>
+            <button
+              onClick={() => setShowNewModal(true)}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-white font-semibold shadow-lg"
+              style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
+            >
+              <Plus className="w-5 h-5" />
+              Nuevo Draft
+            </button>
+          </div>
 
-        <div>
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded-lg text-red-700">
+              {error}
+            </div>
+          )}
+
           {!selectedForecast ? (
             <div className="bg-white rounded-2xl shadow-lg p-12 text-center text-gray-500">
-              Selecciona un Draft para ver el detalle.
+              El Draft ya no está disponible.
             </div>
           ) : (
             <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
-              <div className="order-2 xl:order-2 xl:mt-14 xl:sticky xl:top-[7.25rem] xl:self-start">
+              <div className="order-2 xl:order-2 xl:sticky xl:top-[4.5rem] xl:self-start">
                 <ForecastChatPanel
                   forecast={selectedForecast}
                   mentionUsers={mentionUsers}
@@ -1797,7 +1937,7 @@ const ForecastModule = ({
               </div>
 
               <div className="order-1 xl:order-1 space-y-6">
-                <div className="sticky top-[7.25rem] z-20 bg-white/95 backdrop-blur rounded-2xl shadow-lg p-6 border border-white/70">
+                <div className="sticky top-[4.5rem] z-20 bg-gradient-to-br from-[#e7f5f0] via-white to-[#f4fbf9] backdrop-blur rounded-2xl shadow-lg p-6 border border-[#45ad98]/30">
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
                   <div>
                     <div className="flex items-center gap-3 flex-wrap">
@@ -1824,26 +1964,69 @@ const ForecastModule = ({
                   </div>}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-white/80 rounded-xl p-4 border border-white">
                     <p className="text-xs font-semibold text-gray-500 mb-1">Contacto</p>
                     <p className="text-sm text-gray-800">{selectedForecast.contactoNombre || 'Sin contacto'}</p>
                     <p className="text-xs text-gray-500 mt-1">{selectedForecast.contactoEmail || 'Sin email'}</p>
                     <p className="text-xs text-gray-500">{selectedForecast.contactoTelefono || 'Sin teléfono'}</p>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-white/80 rounded-xl p-4 border border-white">
                     <p className="text-xs font-semibold text-gray-500 mb-1">Unidad de negocio</p>
                     <p className="text-sm text-gray-800">{selectedForecast.unidadNegocio || 'Sin asignar'}</p>
                     <p className="text-xs text-gray-500 mt-2">Fecha límite general</p>
                     <p className="text-sm text-gray-800">{selectedForecast.fechaLimiteGeneral ? formatDate(selectedForecast.fechaLimiteGeneral) : 'Sin fecha'}</p>
                   </div>
-                  <div className="bg-gray-50 rounded-xl p-4">
+                  <div className="bg-white/80 rounded-xl p-4 border border-white">
                     <p className="text-xs font-semibold text-gray-500 mb-1">Observaciones</p>
                     <p className="text-sm text-gray-800 whitespace-pre-wrap">{selectedForecast.observaciones || 'Sin observaciones'}</p>
                   </div>
                 </div>
+
+                <div className="mt-6 pt-5 border-t border-[#45ad98]/20">
+                  <div className="flex items-center gap-2 mb-4">
+                    <LinkIcon className="w-5 h-5 text-[#235250]" />
+                    <h4 className="text-lg font-bold text-gray-800">Comercial</h4>
+                  </div>
+                  <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                    <div className="bg-white rounded-2xl p-4 border border-[#45ad98]/20">
+                      <p className="text-sm font-semibold text-gray-700 mb-2">Cliente</p>
+                      <select value={linkSelection.clienteId} onChange={(e) => setLinkSelection((prev) => ({ ...prev, clienteId: e.target.value }))} className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98] bg-white">
+                        <option value="">Sin vincular</option>
+                        {clientes.map((client) => <option key={client.id} value={client.id}>{client.razon_social}</option>)}
+                      </select>
+                      <div className="flex gap-2 mt-3 flex-wrap">
+                        <button type="button" onClick={handleSaveClientLink} className="px-3 py-2 rounded-xl text-white text-sm font-semibold" style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}>Guardar</button>
+                        <button type="button" onClick={() => setShowCreateClientModal(true)} className="px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50">Crear cliente</button>
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-2xl p-4 border border-[#45ad98]/20">
+                      <p className="text-sm font-semibold text-gray-700 mb-2">Cotización</p>
+                      <select value={linkSelection.cotizacionId} onChange={(e) => setLinkSelection((prev) => ({ ...prev, cotizacionId: e.target.value }))} disabled={!canEditForecastLinks} className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98] bg-white">
+                        <option value="">Sin vincular</option>
+                        {sharedCotizaciones.map((cotizacion) => <option key={cotizacion.id} value={cotizacion.id}>#{cotizacion.numero} · {cotizacion.nombreProyecto || cotizacion.cliente}</option>)}
+                      </select>
+                      <div className="flex gap-2 mt-3 flex-wrap">
+                        {canEditForecastLinks && <button type="button" onClick={handleSaveLinks} className="px-3 py-2 rounded-xl text-white text-sm font-semibold" style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}>Guardar</button>}
+                        {selectedForecast.cotizacionId && canOpenLinkedCotizacion && <button type="button" onClick={() => onOpenCotizacion?.(selectedForecast.cotizacionId)} className="px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50">Abrir</button>}
+                      </div>
+                    </div>
+                    <div className="bg-white rounded-2xl p-4 border border-[#45ad98]/20">
+                      <p className="text-sm font-semibold text-gray-700 mb-2">Protocolo</p>
+                      <select value={linkSelection.protocoloId} onChange={(e) => setLinkSelection((prev) => ({ ...prev, protocoloId: e.target.value }))} disabled={!canEditForecastLinks} className="w-full px-3 py-2.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98] bg-white">
+                        <option value="">Sin vincular</option>
+                        {sharedProtocolos.map((protocolo) => <option key={protocolo.id} value={protocolo.id}>PT-{protocolo.folio} · {protocolo.nombreProyecto || protocolo.cliente}</option>)}
+                      </select>
+                      <div className="flex gap-2 mt-3 flex-wrap">
+                        {canEditForecastLinks && <button type="button" onClick={handleSaveLinks} className="px-3 py-2 rounded-xl text-white text-sm font-semibold" style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}>Guardar</button>}
+                        {!selectedForecast.protocoloId && linkSelection.cotizacionId && canEditForecastLinks && <button type="button" onClick={handleCreateLinkedProtocolo} className="px-3 py-2 rounded-xl border border-[#45ad98] text-sm font-semibold text-[#235250] hover:bg-[#45ad98]/10">Crear desde cotización</button>}
+                        {selectedForecast.protocoloId && canOpenLinkedProtocolo && <button type="button" onClick={() => onOpenProtocolo?.(selectedForecast.protocoloId)} className="px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50">Abrir</button>}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-lg p-6">
+              <div className="bg-[#f2fbf8] rounded-2xl shadow-lg p-6 border border-[#45ad98]/20">
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h4 className="text-lg font-bold text-gray-800">Línea de tiempo</h4>
@@ -1851,146 +2034,7 @@ const ForecastModule = ({
                   </div>
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2">
-                  <ForecastProgressTimeline
-                    currentStage={selectedForecast.etapaActual}
-                    onStageClick={(stage) => handleUpdateStage(selectedForecast, stage)}
-                  />
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl shadow-lg p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <Package className="w-5 h-5 text-[#235250]" />
-                  <h4 className="text-lg font-bold text-gray-800">Cliente</h4>
-                </div>
-                <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto] gap-4 items-start">
-                  <div className="border border-gray-200 rounded-2xl p-4">
-                    <p className="text-sm font-semibold text-gray-700 mb-2">Cliente vinculado</p>
-                    <select
-                      value={linkSelection.clienteId}
-                      onChange={(e) => setLinkSelection((prev) => ({ ...prev, clienteId: e.target.value }))}
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98] bg-white"
-                    >
-                      <option value="">Sin vincular</option>
-                      {clientes.map((client) => (
-                        <option key={client.id} value={client.id}>
-                          {client.razon_social}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="flex gap-3 mt-3 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={handleSaveClientLink}
-                        className="px-4 py-2 rounded-xl text-white font-semibold"
-                        style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
-                      >
-                        Guardar vínculo
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setShowCreateClientModal(true)}
-                        className="px-4 py-2 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50"
-                      >
-                        Crear cliente desde Draft
-                      </button>
-                    </div>
-                  </div>
-                  <div className="bg-gray-50 rounded-2xl p-4 min-w-[260px]">
-                    <p className="text-xs font-semibold text-gray-500 mb-1">Estado actual</p>
-                    <p className="font-semibold text-gray-800">{selectedForecast.clienteNombre || 'Sin cliente'}</p>
-                    {selectedForecast.rutCliente ? <p className="text-sm text-gray-500 mt-1">{selectedForecast.rutCliente}</p> : null}
-                    <p className="text-sm text-gray-500 mt-3">Puedes partir sin cliente y vincularlo después.</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl shadow-lg p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <LinkIcon className="w-5 h-5 text-[#235250]" />
-                  <h4 className="text-lg font-bold text-gray-800">Vínculos</h4>
-                </div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <div className="border border-gray-200 rounded-2xl p-4">
-                    <p className="text-sm font-semibold text-gray-700 mb-2">Cotización</p>
-                    <select
-                      value={linkSelection.cotizacionId}
-                      onChange={(e) => setLinkSelection((prev) => ({ ...prev, cotizacionId: e.target.value }))}
-                      disabled={!canEditForecastLinks}
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98] bg-white"
-                    >
-                      <option value="">Sin vincular</option>
-                      {sharedCotizaciones.map((cotizacion) => (
-                        <option key={cotizacion.id} value={cotizacion.id}>
-                          #{cotizacion.numero} · {cotizacion.nombreProyecto || cotizacion.cliente}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="flex gap-3 mt-3">
-                      {canEditForecastLinks && (
-                        <button
-                          type="button"
-                          onClick={handleSaveLinks}
-                          className="px-4 py-2 rounded-xl text-white font-semibold"
-                          style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
-                        >
-                          Guardar
-                        </button>
-                      )}
-                      {selectedForecast.cotizacionId && canOpenLinkedCotizacion && (
-                        <button
-                          type="button"
-                          onClick={() => onOpenCotizacion?.(selectedForecast.cotizacionId)}
-                          className="px-4 py-2 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50"
-                        >
-                          Abrir cotización
-                        </button>
-                      )}
-                    </div>
-                    {!canEditForecastLinks && (
-                      <p className="text-xs text-gray-500 mt-3">Visible solo para consulta.</p>
-                    )}
-                  </div>
-                  <div className="border border-gray-200 rounded-2xl p-4">
-                    <p className="text-sm font-semibold text-gray-700 mb-2">Protocolo</p>
-                    <select
-                      value={linkSelection.protocoloId}
-                      onChange={(e) => setLinkSelection((prev) => ({ ...prev, protocoloId: e.target.value }))}
-                      disabled={!canEditForecastLinks}
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98] bg-white"
-                    >
-                      <option value="">Sin vincular</option>
-                      {sharedProtocolos.map((protocolo) => (
-                        <option key={protocolo.id} value={protocolo.id}>
-                          PT-{protocolo.folio} · {protocolo.nombreProyecto || protocolo.cliente}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="flex gap-3 mt-3">
-                      {canEditForecastLinks && (
-                        <button
-                          type="button"
-                          onClick={handleSaveLinks}
-                          className="px-4 py-2 rounded-xl text-white font-semibold"
-                          style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
-                        >
-                          Guardar
-                        </button>
-                      )}
-                      {selectedForecast.protocoloId && canOpenLinkedProtocolo && (
-                        <button
-                          type="button"
-                          onClick={() => onOpenProtocolo?.(selectedForecast.protocoloId)}
-                          className="px-4 py-2 rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50"
-                        >
-                          Abrir protocolo
-                        </button>
-                      )}
-                    </div>
-                    {!canEditForecastLinks && (
-                      <p className="text-xs text-gray-500 mt-3">Visible solo para consulta.</p>
-                    )}
-                  </div>
+                  <ForecastProgressTimeline currentStage={selectedForecast.etapaActual} onStageClick={(stage) => handleUpdateStage(selectedForecast, stage)} />
                 </div>
               </div>
 
@@ -2159,12 +2203,13 @@ const ForecastModule = ({
                 </div>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-lg p-6">
+              <div className="grid grid-cols-1 2xl:grid-cols-2 gap-6 items-stretch">
+              <div className="bg-white rounded-2xl shadow-lg p-6 h-[640px] flex flex-col overflow-hidden">
                 <div className="flex items-center gap-2 mb-4">
                   <Calendar className="w-5 h-5 text-[#235250]" />
                   <h4 className="text-lg font-bold text-gray-800">Hitos y fechas clave</h4>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 mb-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-3">
                   <input
                     value={milestoneForm.titulo}
                     onChange={(e) => setMilestoneForm((prev) => ({ ...prev, titulo: e.target.value }))}
@@ -2184,12 +2229,6 @@ const ForecastModule = ({
                     type="date"
                     value={milestoneForm.fecha}
                     onChange={(e) => setMilestoneForm((prev) => ({ ...prev, fecha: e.target.value }))}
-                    className="px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98]"
-                  />
-                  <input
-                    type="date"
-                    value={milestoneForm.fechaFin}
-                    onChange={(e) => setMilestoneForm((prev) => ({ ...prev, fechaFin: e.target.value }))}
                     className="px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98]"
                   />
                   <input
@@ -2215,7 +2254,7 @@ const ForecastModule = ({
                   Agregar hito
                 </button>
 
-                <div className="mt-6 space-y-3">
+                <div className="mt-6 space-y-3 overflow-y-auto pr-1 flex-1">
                   {selectedForecast.hitos.length === 0 ? (
                     <div className="text-sm text-gray-500 bg-gray-50 rounded-xl p-4">No hay hitos cargados.</div>
                   ) : selectedForecast.hitos.map((hito) => (
@@ -2224,10 +2263,10 @@ const ForecastModule = ({
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-semibold text-gray-800">{hito.titulo}</span>
-                            <span className="px-2 py-1 rounded-full bg-gray-100 text-xs font-semibold text-gray-700">{hito.tipo}</span>
+                            <span className={`px-2 py-1 rounded-full border text-xs font-semibold ${getMilestoneColor(hito.tipo).badge}`}>{hito.tipo}</span>
                           </div>
                           <p className="text-sm text-gray-500 mt-1">
-                            {formatDate(hito.fecha)} {hito.fechaFin ? `→ ${formatDate(hito.fechaFin)}` : ''}
+                            {formatDate(hito.fecha)}
                             {hito.responsable ? ` · ${hito.responsable}` : ''}
                           </p>
                           {hito.notas ? <p className="text-sm text-gray-600 mt-2">{hito.notas}</p> : null}
@@ -2257,11 +2296,30 @@ const ForecastModule = ({
                   ))}
                 </div>
               </div>
+              <div className="bg-white rounded-2xl shadow-lg p-6 h-[640px] flex flex-col overflow-hidden">
+                <div className="flex items-center gap-2 mb-4">
+                  <Calendar className="w-5 h-5 text-[#235250]" />
+                  <div>
+                    <h4 className="text-lg font-bold text-gray-800">Calendario de hitos</h4>
+                    <p className="text-sm text-gray-500">Fechas de inicio, término y límite general</p>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  <DraftCalendar
+                    month={calendarMonth}
+                    milestones={selectedForecast.hitos}
+                    deadline={selectedForecast.fechaLimiteGeneral}
+                    onPreviousMonth={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}
+                    onNextMonth={() => setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}
+                  />
+                </div>
+              </div>
+              </div>
               </div>
             </div>
           )}
-        </div>
-      </div>
+        </>
+      )}
 
       {showNewModal && (
         <ForecastFormModal

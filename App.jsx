@@ -14635,7 +14635,7 @@ const Dashboard = ({ user, onLogout }) => {
   }, [user?.id, user?.email, user?.name]);
 
  // Handlers para comunicación entre módulos
-  const handleAdjudicarVentaDesdeCotizacion = async (cotizacion) => {
+  const handleAdjudicarVentaDesdeCotizacion = async (cotizacion, { open = true } = {}) => {
     try {
       // Detectar el vínculo desde ambos lados para no duplicar protocolos antiguos.
       const protocolosExistentes = await getProtocolos();
@@ -14656,10 +14656,12 @@ const Dashboard = ({ user, onLogout }) => {
               : item
           ));
         }
-        setProtocoloParaAbrir(protocoloExistente);
-        setActiveModule('protocolos');
-        alert(`Abriendo protocolo ${protocoloExistente.folio}`);
-        return;
+        if (open) {
+          setProtocoloParaAbrir(protocoloExistente);
+          setActiveModule('protocolos');
+          alert(`Abriendo protocolo ${protocoloExistente.folio}`);
+        }
+        return protocoloExistente;
       }
 
       const nombreProyecto = String(
@@ -14784,10 +14786,12 @@ const Dashboard = ({ user, onLogout }) => {
         })()
       })));
 
-      setProtocoloParaAbrir(protocoloCreado);
-      setActiveModule('protocolos');
-      
+      if (open) {
+        setProtocoloParaAbrir(protocoloCreado);
+        setActiveModule('protocolos');
+      }
       alert('Protocolo creado exitosamente');
+      return protocoloCreado;
     } catch (error) {
       console.error('Error creando protocolo:', error);
       alert('Error al crear protocolo: ' + error.message);
@@ -15552,6 +15556,7 @@ const Dashboard = ({ user, onLogout }) => {
               onMarkChatRead={markForecastChatAsRead}
               onOpenCotizacion={abrirCotizacionDesdeForecast}
               onOpenProtocolo={abrirProtocoloDesdeForecast}
+              onCreateProtocoloFromCotizacion={(cotizacion) => handleAdjudicarVentaDesdeCotizacion(cotizacion, { open: false })}
             />
           )}
 
