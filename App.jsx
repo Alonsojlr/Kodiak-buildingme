@@ -23,7 +23,7 @@ import AuditoriasModule from './src/components/auditorias/AuditoriasModule';
 import { ReportesModule as InformesModule } from './src/components/reportes/ReportesModule';
 import ForecastModule from './src/components/forecast/ForecastModule';
 import { getForecasts as getForecastRecords } from './src/api/forecast';
-import { buildMentionUsers, getDetectedMentionUsers, getMentionSearchState, getMentionSegments, getMentionSuggestions, getUnknownMentionTokens, replaceMentionAtCursor } from './src/utils/chatMentions';
+import { buildMentionUsers, getDetectedMentionUsers, getMentionSearchState, getMentionSegments, getMentionSuggestions, getShortUserName, getUnknownMentionTokens, replaceMentionAtCursor } from './src/utils/chatMentions';
 import { getPushNotificationStatus, subscribeToPushNotifications, sendChatMentionPush } from './src/api/pushNotifications';
 
 const TOAST_EVENT = 'app-toast';
@@ -7742,7 +7742,7 @@ const ProtocoloChatPanel = ({ protocolo, mentionUsers = [], currentUserName, cur
           message: texto,
           contextType: 'protocolo',
           contextId: protocoloId,
-          projectName: protocolo?.nombreProyecto || `PT-${protocolo?.folio || ''}`
+          projectName: `PT-${protocolo?.folio || ''}${protocolo?.nombreProyecto ? ` · ${protocolo.nombreProyecto}` : ''}`
         }).catch((pushError) => {
           console.error('No se pudo enviar la alerta push de protocolo:', pushError);
         });
@@ -7775,7 +7775,7 @@ const ProtocoloChatPanel = ({ protocolo, mentionUsers = [], currentUserName, cur
                   style={{ backgroundColor: bubbleStyle.backgroundColor, borderColor: bubbleStyle.borderColor }}
                 >
                   <p className="text-xs text-gray-500 mb-1">
-                    <span className="font-semibold text-gray-700">{mensaje.userName}</span>
+                    <span className="font-semibold text-gray-700">{getShortUserName(mensaje.userName, mensaje.userEmail)}</span>
                     {mensaje.userEmail ? ` · ${mensaje.userEmail}` : ''}
                     {mensaje.createdAt ? ` · ${formatHora(mensaje.createdAt)}` : ''}
                   </p>
@@ -14115,7 +14115,7 @@ const Dashboard = ({ user, onLogout }) => {
 
     const protocolo = protocolosByIdRef.current.get(mensaje.protocolo_id);
     const nombreProyecto = protocolo?.nombreProyecto || `PT-${protocolo?.folio || ''}`;
-    const remitente = String(mensaje.user_name || mensaje.user_email || 'Usuario');
+    const remitente = getShortUserName(mensaje.user_name, mensaje.user_email);
 
     notifyToast(`Mensaje de ${remitente} en ${nombreProyecto || 'proyecto'}`, 'info');
     playNotificationSound();
@@ -14162,8 +14162,8 @@ const Dashboard = ({ user, onLogout }) => {
     if (isOwnMessage || !isDirectedToCurrentUser) return;
 
     const forecast = forecastsByIdRef.current.get(mensaje.forecast_id);
-    const nombreProyecto = forecast?.nombreProyecto || `FW-${forecast?.numero || ''}`;
-    const remitente = String(mensaje.user_name || mensaje.user_email || 'Usuario');
+    const nombreProyecto = forecast?.nombreProyecto || `DF-${forecast?.numero || ''}`;
+    const remitente = getShortUserName(mensaje.user_name, mensaje.user_email);
 
     notifyToast(`Mensaje de ${remitente} en Draft ${nombreProyecto || ''}`.trim(), 'info');
     playNotificationSound();
@@ -15020,7 +15020,7 @@ const Dashboard = ({ user, onLogout }) => {
           if (!mensaje?.protocolo_id || latestByProtocolo[mensaje.protocolo_id]) return;
           latestByProtocolo[mensaje.protocolo_id] = {
             lastMessageText: String(mensaje.mensaje || ''),
-            lastMessageUser: String(mensaje.user_name || mensaje.user_email || 'Usuario'),
+            lastMessageUser: getShortUserName(mensaje.user_name, mensaje.user_email),
             lastMessageAt: mensaje.created_at || null
           };
         });
@@ -15076,7 +15076,7 @@ const Dashboard = ({ user, onLogout }) => {
           if (!mensaje?.forecast_id || latestByForecast[mensaje.forecast_id]) return;
           latestByForecast[mensaje.forecast_id] = {
             lastMessageText: String(mensaje.mensaje || ''),
-            lastMessageUser: String(mensaje.user_name || mensaje.user_email || 'Usuario'),
+            lastMessageUser: getShortUserName(mensaje.user_name, mensaje.user_email),
             lastMessageAt: mensaje.created_at || null
           };
         });
@@ -15259,7 +15259,7 @@ const Dashboard = ({ user, onLogout }) => {
                     loading={loadingUnreadForecastChatSummaries}
                     title="Mensajes sin leer en Draft"
                     subtitle="Selecciona el Draft que quieres responder"
-                    prefix="FW-"
+                    prefix="DF-"
                     entitySingular="Draft"
                     items={forecastsNoLeidos.map((forecast) => ({
                       ...forecast,

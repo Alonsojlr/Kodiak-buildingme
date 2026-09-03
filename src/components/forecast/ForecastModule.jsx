@@ -27,10 +27,11 @@ import {
   XCircle,
   Download,
   MessageCircle,
+  Image as ImageIcon,
   ChevronLeft,
   ChevronRight
 } from 'lucide-react'
-import { getDetectedMentionUsers, getMentionSearchState, getMentionSegments, getMentionSuggestions, getUnknownMentionTokens, replaceMentionAtCursor } from '../../utils/chatMentions'
+import { getDetectedMentionUsers, getMentionSearchState, getMentionSegments, getMentionSuggestions, getShortUserName, getUnknownMentionTokens, replaceMentionAtCursor } from '../../utils/chatMentions'
 import { sendChatMentionPush } from '../../api/pushNotifications'
 
 const TOAST_EVENT = 'app-toast'
@@ -51,6 +52,7 @@ const MILESTONE_COLORS = {
 }
 
 const getMilestoneColor = (type) => MILESTONE_COLORS[type] || MILESTONE_COLORS.Otro
+const isImageUrl = (url) => /\.(jpg|jpeg|png|gif|webp|svg)(?:\?.*)?$/i.test(String(url || ''))
 
 const notifyToast = (message, type = 'success') => {
   if (!message) return
@@ -608,13 +610,13 @@ const ForecastProgressTimeline = ({ currentStage, onStageClick }) => {
     : 0
 
   return (
-    <div className="overflow-x-auto pb-2">
-      <div className="relative min-w-[760px] px-2 py-5">
-        <div className="absolute left-8 right-8 top-10 h-1 rounded-full bg-gray-200" />
+    <div className="w-full overflow-x-auto pb-2">
+      <div className="relative w-4/5 min-w-[760px] mx-auto px-2 py-7">
+        <div className="absolute left-9 right-9 top-12 h-1.5 rounded-full bg-gray-200" />
         <div
-          className="absolute left-8 top-10 h-1 rounded-full transition-all duration-300"
+          className="absolute left-9 top-12 h-1.5 rounded-full transition-all duration-300"
           style={{
-            width: `calc((100% - 4rem) * ${progress / 100})`,
+            width: `calc((100% - 4.5rem) * ${progress / 100})`,
             background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)'
           }}
         />
@@ -631,7 +633,7 @@ const ForecastProgressTimeline = ({ currentStage, onStageClick }) => {
                 className="flex flex-col items-center text-center group"
               >
                 <span
-                  className={`flex h-10 w-10 items-center justify-center rounded-full border-4 text-sm font-bold transition-all ${
+                  className={`flex h-12 w-12 items-center justify-center rounded-full border-4 text-base font-bold transition-all ${
                     active
                       ? 'text-white border-white shadow-xl scale-110'
                       : completed
@@ -642,7 +644,7 @@ const ForecastProgressTimeline = ({ currentStage, onStageClick }) => {
                 >
                   {index + 1}
                 </span>
-                <span className={`mt-3 max-w-[96px] text-xs font-semibold leading-tight transition-colors ${
+                <span className={`mt-3 max-w-[116px] text-sm font-semibold leading-tight transition-colors ${
                   active ? 'text-[#235250]' : completed ? 'text-emerald-700' : 'text-gray-500'
                 }`}>
                   {stage}
@@ -969,7 +971,7 @@ const ForecastChatPanel = ({ forecast, mentionUsers = [], currentUserName, curre
           message: texto,
           contextType: 'forecast',
           contextId: forecastId,
-          projectName: forecast?.nombreProyecto || `FW-${forecast?.numero || ''}`
+          projectName: `DF-${forecast?.numero || ''}${forecast?.nombreProyecto ? ` · ${forecast.nombreProyecto}` : ''}`
         }).catch((pushError) => {
           console.error('No se pudo enviar la alerta push de forecast:', pushError)
         })
@@ -980,10 +982,10 @@ const ForecastChatPanel = ({ forecast, mentionUsers = [], currentUserName, curre
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 flex flex-col h-[520px]">
+    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 flex flex-col h-[680px] xl:h-[1320px]">
       <div className="p-4 border-b border-gray-100">
         <h3 className="text-lg font-bold text-gray-800">Chat del Draft</h3>
-        <p className="text-xs text-gray-500 mt-1 truncate">{forecast?.nombreProyecto || `FW-${forecast?.numero || ''}`}</p>
+        <p className="text-xs text-gray-500 mt-1 truncate">{forecast?.nombreProyecto || `DF-${forecast?.numero || ''}`}</p>
       </div>
 
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-3 space-y-3 bg-gray-50/60">
@@ -1002,7 +1004,7 @@ const ForecastChatPanel = ({ forecast, mentionUsers = [], currentUserName, curre
                   style={{ backgroundColor: bubbleStyle.backgroundColor, borderColor: bubbleStyle.borderColor }}
                 >
                   <p className="text-xs text-gray-500 mb-1">
-                    <span className="font-semibold text-gray-700">{mensaje.userName}</span>
+                    <span className="font-semibold text-gray-700">{getShortUserName(mensaje.userName, mensaje.userEmail)}</span>
                     {mensaje.userEmail ? ` · ${mensaje.userEmail}` : ''}
                     {mensaje.createdAt ? ` · ${formatHora(mensaje.createdAt)}` : ''}
                   </p>
@@ -1220,6 +1222,8 @@ const ForecastModule = ({
     cotizacionId: '',
     protocoloId: ''
   })
+  const [uploadingRender, setUploadingRender] = useState(false)
+  const renderUploadInputRef = useRef(null)
   const isDisenoRole = String(currentUser?.role || '').toLowerCase() === 'diseno'
   const canDeleteForecast = String(currentUser?.role || '').toLowerCase() !== 'ventas'
   const canEditForecastLinks = !isDisenoRole
@@ -1230,6 +1234,14 @@ const ForecastModule = ({
     () => forecasts.find((item) => item.id === selectedForecastId) || null,
     [forecasts, selectedForecastId]
   )
+
+  const featuredRender = useMemo(() => {
+    if (!selectedForecast) return null
+    const documents = selectedForecast.documentos || []
+    return documents.find((documento) => documento.tipo === 'Render destacado' && isImageUrl(documento.archivoUrl))
+      || documents.find((documento) => String(documento.etapa || '').toLowerCase().startsWith('render') && isImageUrl(documento.archivoUrl))
+      || null
+  }, [selectedForecast])
 
   useEffect(() => {
     selectedForecastIdRef.current = selectedForecastId
@@ -1246,6 +1258,20 @@ const ForecastModule = ({
       return matchSearch && matchStage
     })
   }, [forecasts, filterStage, searchTerm])
+
+  const draftStats = useMemo(() => {
+    const isClosed = (forecast) => String(forecast.estado || '').toLowerCase() === 'cerrado'
+    const renderStages = new Set(['Render propuesta', 'Correcciones', 'Render final'])
+    const finalStages = new Set(['Cotización', 'OK Cliente', 'Protocolo'])
+
+    return {
+      total: forecasts.length,
+      brief: forecasts.filter((forecast) => forecast.etapaActual === 'Brief' && !isClosed(forecast)).length,
+      render: forecasts.filter((forecast) => renderStages.has(forecast.etapaActual) && !isClosed(forecast)).length,
+      proyectoFinal: forecasts.filter((forecast) => finalStages.has(forecast.etapaActual) && !isClosed(forecast)).length,
+      cerrados: forecasts.filter(isClosed).length
+    }
+  }, [forecasts])
 
   const openForecastDetail = (forecast) => {
     if (!forecast) return
@@ -1472,7 +1498,7 @@ const ForecastModule = ({
 
   const handleDeleteForecast = async (forecast) => {
     if (!canDeleteForecast) return
-    const confirmed = window.confirm(`¿Eliminar el Draft FW-${forecast.numero}?`)
+    const confirmed = window.confirm(`¿Eliminar el Draft DF-${forecast.numero}?`)
     if (!confirmed) return
 
     try {
@@ -1493,6 +1519,17 @@ const ForecastModule = ({
     } catch (updateError) {
       console.error('Error actualizando etapa:', updateError)
       notifyToast('No se pudo actualizar la etapa', 'error')
+    }
+  }
+
+  const handleUpdateForecastStatus = async (forecast, nextStatus) => {
+    try {
+      await updateForecast(forecast.id, { estado: nextStatus })
+      await loadForecastData()
+      notifyToast('Estado actualizado', 'success')
+    } catch (updateError) {
+      console.error('Error actualizando estado:', updateError)
+      notifyToast('No se pudo actualizar el estado', 'error')
     }
   }
 
@@ -1648,6 +1685,56 @@ const ForecastModule = ({
       file: null,
       archivoUrlActual: documento.archivoUrl || ''
     })
+  }
+
+  const handleFeaturedRenderUpload = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file || !selectedForecast) return
+    if (!file.type.startsWith('image/')) {
+      notifyToast('Selecciona una imagen para el Render', 'warning')
+      return
+    }
+
+    try {
+      setUploadingRender(true)
+      const archivoUrl = await uploadForecastFile({
+        forecastId: selectedForecast.id,
+        file,
+        folder: 'render-destacado'
+      })
+      const renderActual = (selectedForecast.documentos || []).find((documento) => documento.tipo === 'Render destacado')
+
+      if (renderActual) {
+        await updateForecastDocument(renderActual.id, {
+          etapa: 'Render propuesta',
+          tipo: 'Render destacado',
+          nombre: file.name,
+          archivo_url: archivoUrl,
+          edit_url: null,
+          comentarios: 'Render principal del Draft'
+        })
+      } else {
+        await createForecastDocument({
+          forecast_id: selectedForecast.id,
+          etapa: 'Render propuesta',
+          tipo: 'Render destacado',
+          nombre: file.name,
+          archivo_url: archivoUrl,
+          edit_url: null,
+          comentarios: 'Render principal del Draft',
+          created_by: currentUserName || currentUser?.email || ''
+        })
+      }
+
+      await loadForecastData()
+      notifyToast('Render actualizado correctamente', 'success')
+    } catch (uploadError) {
+      console.error('Error subiendo render destacado:', uploadError)
+      notifyToast(getErrorMessage(uploadError, 'No se pudo subir el Render'), 'error')
+    } finally {
+      setUploadingRender(false)
+    }
   }
 
   const handleSaveDocument = async () => {
@@ -1825,8 +1912,31 @@ const ForecastModule = ({
             </div>
           )}
 
-          <div className="bg-[#edf8f4] rounded-2xl shadow-lg overflow-hidden border border-[#45ad98]/20">
-            <div className="p-5 border-b border-[#45ad98]/15 bg-white/75 flex flex-col lg:flex-row lg:items-center gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+            <div className="bg-white rounded-xl p-4 shadow border border-[#45ad98]/15">
+              <p className="text-sm text-gray-500 mb-1">Total Draft</p>
+              <p className="text-2xl font-bold text-gray-800">{draftStats.total}</p>
+            </div>
+            <div className="bg-sky-50 rounded-xl p-4 shadow border border-sky-100">
+              <p className="text-sm text-sky-700 mb-1">En Brief</p>
+              <p className="text-2xl font-bold text-sky-900">{draftStats.brief}</p>
+            </div>
+            <div className="bg-amber-50 rounded-xl p-4 shadow border border-amber-100">
+              <p className="text-sm text-amber-700 mb-1">En Render</p>
+              <p className="text-2xl font-bold text-amber-900">{draftStats.render}</p>
+            </div>
+            <div className="bg-[#edf8f4] rounded-xl p-4 shadow border border-[#45ad98]/20">
+              <p className="text-sm text-[#287765] mb-1">Proyecto final</p>
+              <p className="text-2xl font-bold text-[#235250]">{draftStats.proyectoFinal}</p>
+            </div>
+            <div className="bg-slate-100 rounded-xl p-4 shadow border border-slate-200">
+              <p className="text-sm text-slate-600 mb-1">Cerrados</p>
+              <p className="text-2xl font-bold text-slate-800">{draftStats.cerrados}</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-lg border border-[#45ad98]/20 p-5 mb-6">
+            <div className="flex flex-col lg:flex-row lg:items-center gap-4">
               <input
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -1845,47 +1955,70 @@ const ForecastModule = ({
               </select>
               <span className="text-sm text-gray-500 whitespace-nowrap">{filteredForecasts.length} Draft</span>
             </div>
+          </div>
 
+          <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-[#45ad98]/20">
             {loading ? (
               <div className="text-center py-16 text-gray-500">Cargando Draft...</div>
             ) : filteredForecasts.length === 0 ? (
               <div className="text-center py-16 text-gray-500">No hay Draft registrados</div>
             ) : (
-              <div className="divide-y divide-gray-100">
-                {filteredForecasts.map((forecast) => (
-                  <button
-                    key={forecast.id}
-                    type="button"
-                    onClick={() => openForecastDetail(forecast)}
-                    className="w-full text-left px-5 py-5 hover:bg-white/80 transition-colors"
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-[110px_minmax(0,1.5fr)_minmax(0,1fr)_auto] gap-3 md:items-center">
-                      <div>
-                        <p className="font-mono font-bold text-[#235250]">FW-{forecast.numero}</p>
-                        <p className="text-xs text-gray-500 mt-1">{forecast.prioridad}</p>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-gray-800 truncate">{forecast.nombreProyecto || 'Sin nombre de proyecto'}</p>
-                        <p className="text-sm text-gray-500 truncate mt-1">{forecast.clienteNombre}</p>
-                      </div>
-                      <div className="flex flex-wrap gap-2 text-xs text-gray-500">
-                        <span>{forecast.documentos.length} docs</span>
-                        <span>{forecast.hitos.length} hitos</span>
-                        {forecast.fechaLimiteGeneral ? <span>Limite: {formatDate(forecast.fechaLimiteGeneral)}</span> : null}
-                      </div>
-                      <div className="flex items-center justify-between md:justify-end gap-3">
-                        {forecast.chatMessagesCount > 0 ? (
-                          <span className="inline-flex items-center justify-center min-w-6 h-6 px-2 rounded-full bg-red-500 text-white text-xs font-bold">
-                            {forecast.chatMessagesCount}
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1150px]">
+                  <thead className="bg-[#45ad98] text-white">
+                    <tr className="text-left text-xs uppercase tracking-wide">
+                      <th className="px-5 py-4 font-semibold">Código</th>
+                      <th className="px-5 py-4 font-semibold">Proyecto</th>
+                      <th className="px-5 py-4 font-semibold">Cliente</th>
+                      <th className="px-5 py-4 font-semibold">Etapa</th>
+                      <th className="px-5 py-4 font-semibold">Estado</th>
+                      <th className="px-5 py-4 font-semibold text-center">Hitos</th>
+                      <th className="px-5 py-4 font-semibold text-center">Docs</th>
+                      <th className="px-5 py-4 font-semibold">Fecha límite</th>
+                      <th className="px-5 py-4 font-semibold">Vínculos</th>
+                      <th className="px-5 py-4 font-semibold text-right">Abrir</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredForecasts.map((forecast) => (
+                      <tr key={forecast.id} className="hover:bg-[#edf8f4]/70 transition-colors">
+                        <td className="px-5 py-4 align-top">
+                          <p className="font-mono font-bold text-[#235250]">DF-{forecast.numero}</p>
+                          <p className="text-xs text-gray-500 mt-1">{forecast.prioridad}</p>
+                        </td>
+                        <td className="px-5 py-4 align-top max-w-xs">
+                          <p className="font-semibold text-gray-800 truncate">{forecast.nombreProyecto || 'Sin nombre de proyecto'}</p>
+                        </td>
+                        <td className="px-5 py-4 align-top max-w-[220px]">
+                          <p className="text-sm text-gray-600 truncate">{forecast.clienteNombre || 'Sin cliente'}</p>
+                        </td>
+                        <td className="px-5 py-4 align-top">
+                          <span className="inline-flex px-3 py-1 rounded-full text-xs font-semibold bg-[#45ad98]/10 text-[#235250] whitespace-nowrap">{forecast.etapaActual}</span>
+                        </td>
+                        <td className="px-5 py-4 align-top">
+                          <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${String(forecast.estado || '').toLowerCase() === 'cerrado' ? 'bg-slate-200 text-slate-700' : 'bg-green-100 text-green-800'}`}>
+                            {forecast.estado || 'Activo'}
                           </span>
-                        ) : null}
-                        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 whitespace-nowrap">
-                          {forecast.etapaActual}
-                        </span>
-                      </div>
-                    </div>
-                  </button>
-                ))}
+                        </td>
+                        <td className="px-5 py-4 align-top text-center font-semibold text-gray-700">{forecast.hitos.length}</td>
+                        <td className="px-5 py-4 align-top text-center font-semibold text-gray-700">{forecast.documentos.length}</td>
+                        <td className="px-5 py-4 align-top text-sm text-gray-600 whitespace-nowrap">{forecast.fechaLimiteGeneral ? formatDate(forecast.fechaLimiteGeneral) : 'Sin fecha'}</td>
+                        <td className="px-5 py-4 align-top">
+                          <div className="flex flex-col gap-1 text-xs text-gray-600 whitespace-nowrap">
+                            {forecast.cotizacionNumero ? <span>COT #{forecast.cotizacionNumero}</span> : <span className="text-gray-400">Sin cotización</span>}
+                            {forecast.protocoloFolio ? <span>PT-{forecast.protocoloFolio}</span> : <span className="text-gray-400">Sin protocolo</span>}
+                          </div>
+                        </td>
+                        <td className="px-5 py-4 align-top text-right">
+                          <button type="button" onClick={() => openForecastDetail(forecast)} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-[#45ad98]/30 text-sm font-semibold text-[#235250] hover:bg-[#edf8f4]">
+                            {forecast.chatMessagesCount > 0 && <span className="inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold">{forecast.chatMessagesCount}</span>}
+                            Ver Draft
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
@@ -1926,7 +2059,7 @@ const ForecastModule = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
-              <div className="order-2 xl:order-2 xl:sticky xl:top-[4.5rem] xl:self-start">
+              <div className="order-2 xl:order-2">
                 <ForecastChatPanel
                   forecast={selectedForecast}
                   mentionUsers={mentionUsers}
@@ -1937,17 +2070,28 @@ const ForecastModule = ({
               </div>
 
               <div className="order-1 xl:order-1 space-y-6">
-                <div className="sticky top-[4.5rem] z-20 bg-gradient-to-br from-[#e7f5f0] via-white to-[#f4fbf9] backdrop-blur rounded-2xl shadow-lg p-6 border border-[#45ad98]/30">
-                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
+                <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,7fr)_minmax(0,3fr)] gap-6 items-stretch">
+                  <div className="bg-gradient-to-br from-[#e7f5f0] via-white to-[#f4fbf9] rounded-2xl shadow-lg p-6 border border-[#45ad98]/30">
+                  <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
                   <div>
                     <div className="flex items-center gap-3 flex-wrap">
-                      <span className="font-mono font-bold text-xl text-[#235250]">FW-{selectedForecast.numero}</span>
+                      <span className="font-mono font-bold text-xl text-[#235250]">DF-{selectedForecast.numero}</span>
                       <span className="px-3 py-1 rounded-full text-xs font-semibold bg-[#45ad98]/10 text-[#235250]">
                         {selectedForecast.prioridad}
                       </span>
                       <span className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">
                         {selectedForecast.etapaActual}
                       </span>
+                      <select
+                        value={selectedForecast.estado || 'Activo'}
+                        onChange={(e) => handleUpdateForecastStatus(selectedForecast, e.target.value)}
+                        className="px-3 py-1 rounded-full text-xs font-semibold bg-white border border-[#45ad98]/30 text-[#235250] focus:outline-none focus:border-[#45ad98]"
+                        aria-label="Estado del Draft"
+                      >
+                        <option value="Activo">Activo</option>
+                        <option value="En pausa">En pausa</option>
+                        <option value="Cerrado">Cerrado</option>
+                      </select>
                     </div>
                     <h3 className="text-2xl font-bold text-gray-800 mt-3">{selectedForecast.nombreProyecto}</h3>
                     <p className="text-gray-600 mt-1">{selectedForecast.clienteNombre}</p>
@@ -1962,7 +2106,7 @@ const ForecastModule = ({
                       Eliminar
                     </button>
                   </div>}
-                </div>
+                  </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
                   <div className="bg-white/80 rounded-xl p-4 border border-white">
                     <p className="text-xs font-semibold text-gray-500 mb-1">Contacto</p>
@@ -2022,18 +2166,60 @@ const ForecastModule = ({
                         {selectedForecast.protocoloId && canOpenLinkedProtocolo && <button type="button" onClick={() => onOpenProtocolo?.(selectedForecast.protocoloId)} className="px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50">Abrir</button>}
                       </div>
                     </div>
+                </div>
+                </div>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-lg border border-[#45ad98]/25 overflow-hidden h-full flex flex-col">
+                  <div className="flex items-center justify-between p-4 border-b border-[#45ad98]/15">
+                    <div className="flex items-center gap-2">
+                      <ImageIcon className="w-5 h-5 text-[#235250]" />
+                      <div>
+                        <h4 className="font-bold text-gray-800">Render</h4>
+                        <p className="text-xs text-gray-500">Imagen principal del proyecto</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-4 flex-1 flex flex-col">
+                    {featuredRender ? (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDocumento(featuredRender)}
+                        className="block w-full flex-1 min-h-[280px] rounded-xl overflow-hidden bg-gray-100 border border-gray-200 group"
+                        title="Ver render en tamaño completo"
+                      >
+                        <img src={featuredRender.archivoUrl} alt={featuredRender.nombre || 'Render del proyecto'} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                      </button>
+                    ) : (
+                      <div className="flex-1 min-h-[280px] rounded-xl border-2 border-dashed border-[#45ad98]/35 bg-[#edf8f4]/60 flex flex-col items-center justify-center text-center px-6">
+                        <ImageIcon className="w-10 h-10 text-[#45ad98] mb-3" />
+                        <p className="font-semibold text-[#235250]">Aún no hay un Render</p>
+                        <p className="text-xs text-gray-500 mt-1">Sube una imagen para tenerla siempre visible aquí.</p>
+                      </div>
+                    )}
+                    <input ref={renderUploadInputRef} type="file" accept="image/*" onChange={handleFeaturedRenderUpload} className="hidden" />
+                    <button
+                      type="button"
+                      onClick={() => renderUploadInputRef.current?.click()}
+                      disabled={uploadingRender}
+                      className="mt-4 w-full px-4 py-2.5 rounded-xl text-white font-semibold disabled:opacity-60"
+                      style={{ background: 'linear-gradient(135deg, #235250 0%, #45ad98 100%)' }}
+                    >
+                      {uploadingRender ? 'Subiendo Render...' : featuredRender ? 'Cambiar Render' : 'Subir Render'}
+                    </button>
+                    {featuredRender ? <p className="text-xs text-gray-500 mt-3 truncate">{featuredRender.nombre}</p> : null}
                   </div>
                 </div>
-              </div>
+                </div>
 
-              <div className="bg-[#f2fbf8] rounded-2xl shadow-lg p-6 border border-[#45ad98]/20">
+                <div className="bg-[#f2fbf8] rounded-2xl shadow-lg p-6 border border-[#45ad98]/20">
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h4 className="text-lg font-bold text-gray-800">Línea de tiempo</h4>
                     <p className="text-sm text-gray-500">Marca la etapa actual del proyecto</p>
                   </div>
                 </div>
-                <div className="flex gap-3 overflow-x-auto pb-2">
+                <div className="w-full">
                   <ForecastProgressTimeline currentStage={selectedForecast.etapaActual} onStageClick={(stage) => handleUpdateStage(selectedForecast, stage)} />
                 </div>
               </div>
@@ -2043,7 +2229,7 @@ const ForecastModule = ({
                   <FileText className="w-5 h-5 text-[#235250]" />
                   <h4 className="text-lg font-bold text-gray-800">Documentos</h4>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 mb-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-5">
                   <select
                     value={documentForm.etapa}
                     onChange={(e) => setDocumentForm((prev) => ({ ...prev, etapa: e.target.value }))}
@@ -2053,12 +2239,6 @@ const ForecastModule = ({
                       <option key={stage} value={stage}>{stage}</option>
                     ))}
                   </select>
-                  <input
-                    value={documentForm.tipo}
-                    onChange={(e) => setDocumentForm((prev) => ({ ...prev, tipo: e.target.value }))}
-                    className="px-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-[#45ad98]"
-                    placeholder="Tipo"
-                  />
                   <input
                     value={documentForm.nombre}
                     onChange={(e) => setDocumentForm((prev) => ({ ...prev, nombre: e.target.value }))}

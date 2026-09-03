@@ -26,8 +26,16 @@ const mentionToken = (value: unknown) => normalize(value)
   .replace(/\s+/g, ' ')
   .trim()
 
+const getShortName = (value: unknown, email: unknown = '') => {
+  const name = String(value || '').trim()
+  if (name && !name.includes('@')) return name.split(/\s+/)[0]
+
+  const emailLocal = String(email || name).split('@')[0] || ''
+  return emailLocal.split(/[._-]/)[0] || emailLocal || 'Usuario'
+}
+
 const getMentionKey = (user: { nombre?: string | null, email?: string | null }) => {
-  const name = mentionToken(user.nombre).replace(/\s+/g, '')
+  const name = mentionToken(getShortName(user.nombre, user.email)).replace(/\s+/g, '')
   const email = normalize(String(user.email || '').split('@')[0]).replace(/[^a-z0-9._-]/g, '')
   return name || email || 'usuario'
 }
@@ -200,16 +208,23 @@ Deno.serve(async (req) => {
       .in('user_id', recipientIds)
     if (subscriptionsError) throw subscriptionsError
 
-    const sender = String(user.user_metadata?.nombre || user.email || 'Alguien')
+    const sender = getShortName(user.user_metadata?.nombre, user.email)
     const projectName = String(body?.projectName || '').trim()
-    const section = contextType === 'forecast' ? 'Forecast' : 'Protocolo'
+    const section = contextType === 'forecast' ? 'Draft' : 'Protocolo'
+    const recipientNames = (users || [])
+      .filter((mentionedUser) => recipientIds.includes(String(mentionedUser.auth_id)))
+      .map((mentionedUser) => getShortName(mentionedUser.nombre, mentionedUser.email))
+    const messagePreview = message
+      .replace(/@[a-z0-9._-]+/gi, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim()
     const origin = Deno.env.get('APP_URL') || req.headers.get('origin') || ''
     const url = origin
       ? `${origin.replace(/\/$/, '')}/?push=${contextType}&id=${encodeURIComponent(contextId)}`
       : '/'
     const notification = JSON.stringify({
       title: `Mensaje en ${section}${projectName ? `: ${projectName}` : ''}`,
-      body: `${sender}: ${message.slice(0, 160)}`,
+      body: `${sender} dice${messagePreview ? `: ${messagePreview.slice(0, 140)}` : ''}${recipientNames.length ? ` a ${recipientNames.join(', ')}` : ''}`,
       url,
       tag: `kodiak-${contextType}-${contextId}`
     })

@@ -10,12 +10,21 @@ const slugifyMentionToken = (value) =>
     .replace(/\s+/g, ' ')
     .trim()
 
+export const getShortUserName = (value, email = '') => {
+  const name = String(value || '').trim()
+  if (name && !name.includes('@')) return name.split(/\s+/)[0]
+
+  const emailLocal = String(email || name).split('@')[0] || ''
+  const firstPart = emailLocal.split(/[._-]/)[0] || emailLocal
+  return firstPart || 'Usuario'
+}
+
 const getBaseMentionKey = (user = {}) => {
   const displayName = String(user.name || user.nombre || '').trim()
   const email = String(user.email || '').trim()
   const emailLocal = normalizeMentionText(email.split('@')[0] || '').replace(/[^a-z0-9._-]/g, '')
 
-  const compactName = slugifyMentionToken(displayName).replace(/\s+/g, '')
+  const compactName = slugifyMentionToken(getShortUserName(displayName, email)).replace(/\s+/g, '')
   return compactName || emailLocal || 'usuario'
 }
 
