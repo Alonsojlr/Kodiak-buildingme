@@ -134,7 +134,7 @@ export const replaceMentionAtCursor = (value, cursorPosition, mentionUser) => {
     return { value: String(value || ''), cursor: typeof cursorPosition === 'number' ? cursorPosition : String(value || '').length }
   }
 
-  const mentionText = `@${mentionUser.mentionKey} `
+  const mentionText = `@${getShortUserName(mentionUser.displayName, mentionUser.email)} `
   const safeValue = String(value || '')
   const nextValue = safeValue.slice(0, state.start) + mentionText + safeValue.slice(state.end)
   const nextCursor = state.start + mentionText.length
@@ -158,7 +158,11 @@ export const getMentionSegments = (value, mentionUsers = []) => {
     const mentionText = match[0]
     const mentionKey = normalizeMentionText(mentionText.slice(1))
     const user = lookup.get(mentionKey) || null
-    segments.push({ text: mentionText, isMention: Boolean(user), user })
+    segments.push({
+      text: user ? `@${getShortUserName(user.displayName, user.email)}` : mentionText,
+      isMention: Boolean(user),
+      user
+    })
     lastIndex = match.index + mentionText.length
   }
 
